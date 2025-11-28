@@ -1,9 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { put, head } from "@vercel/blob";
-import {
-  CuaSandboxClient,
-  type CreateSandboxOptions,
-} from "../lib/cua-client.js";
+import { CuaSandboxClient } from "../lib/cua-client.js";
 import {
   executeTask,
   describeScreen,
@@ -40,10 +37,11 @@ interface Tool {
   };
 }
 
-// Tool definitions - 10 total (7 sandbox + 3 agentic)
+// Tool definitions - 8 total (5 sandbox management + 3 agentic)
 const TOOLS: Tool[] = [
   // ==========================================
-  // Sandbox Management Tools (7)
+  // Sandbox Management Tools (5)
+  // Note: Create/delete must be done via CUA Dashboard
   // ==========================================
   {
     name: "list_sandboxes",
@@ -65,32 +63,6 @@ const TOOLS: Tool[] = [
         },
       },
       required: ["name"],
-    },
-  },
-  {
-    name: "create_sandbox",
-    description:
-      "Create a new CUA cloud sandbox (VM). Returns the sandbox name once created.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        os: {
-          type: "string",
-          enum: ["linux", "windows", "macos"],
-          description: "Operating system for the sandbox",
-        },
-        size: {
-          type: "string",
-          enum: ["small", "medium", "large"],
-          description: "Size of the sandbox (affects CPU/RAM)",
-        },
-        region: {
-          type: "string",
-          enum: ["north-america", "europe", "asia"],
-          description: "Geographic region for the sandbox",
-        },
-      },
-      required: ["os", "size", "region"],
     },
   },
   {
@@ -130,20 +102,6 @@ const TOOLS: Tool[] = [
         name: {
           type: "string",
           description: "The sandbox name to restart",
-        },
-      },
-      required: ["name"],
-    },
-  },
-  {
-    name: "delete_sandbox",
-    description: "Delete a sandbox permanently",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: {
-          type: "string",
-          description: "The sandbox name to delete",
         },
       },
       required: ["name"],
@@ -257,13 +215,6 @@ async function executeTool(
     case "get_sandbox":
       return await sandboxClient.getSandbox(args.name as string);
 
-    case "create_sandbox":
-      return await sandboxClient.createSandbox({
-        os: args.os as CreateSandboxOptions["os"],
-        size: args.size as CreateSandboxOptions["size"],
-        region: args.region as CreateSandboxOptions["region"],
-      });
-
     case "start_sandbox":
       return await sandboxClient.startSandbox(args.name as string);
 
@@ -272,9 +223,6 @@ async function executeTool(
 
     case "restart_sandbox":
       return await sandboxClient.restartSandbox(args.name as string);
-
-    case "delete_sandbox":
-      return await sandboxClient.deleteSandbox(args.name as string);
 
     // ==========================================
     // Agentic Tools

@@ -37,19 +37,19 @@ Claude Code (Orchestrator)
 (TEXT ONLY - no images)
 ```
 
-## Available Tools (10 total)
+## Available Tools (8 total)
 
-### Sandbox Management (7 tools)
+### Sandbox Management (5 tools)
 
 | Tool | Description |
 |------|-------------|
 | `list_sandboxes` | List all CUA cloud sandboxes with their current status |
 | `get_sandbox` | Get details of a specific sandbox including API URLs |
-| `create_sandbox` | Create a new VM (os: linux/windows/macos, size: small/medium/large, region) |
 | `start_sandbox` | Start a stopped sandbox |
 | `stop_sandbox` | Stop a running sandbox |
 | `restart_sandbox` | Restart a sandbox |
-| `delete_sandbox` | Delete a sandbox permanently |
+
+> **Note:** Create and delete sandboxes via the [CUA Dashboard](https://cloud.trycua.com) - the Cloud API doesn't expose these operations.
 
 ### Agentic Tools (3 tools)
 
@@ -88,10 +88,10 @@ Add to your `~/.claude.json`:
 You: "List my CUA sandboxes"
 Claude: [Uses list_sandboxes tool]
 
-You: "Create a new Linux sandbox in north-america, small size"
-Claude: [Uses create_sandbox tool]
+You: "Start my-sandbox"
+Claude: [Uses start_sandbox tool]
 
-You: "Open Firefox and go to google.com on my-sandbox-name"
+You: "Open Firefox and go to google.com on my-sandbox"
 Claude: [Uses run_task with task="Open Firefox and navigate to google.com"]
 → Returns: { success: true, summary: "Opened Firefox, navigated to google.com", steps_taken: 4 }
 

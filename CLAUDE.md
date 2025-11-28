@@ -44,7 +44,7 @@ Claude Code (Orchestrator)
 
 ### Key Files
 
-- `api/mcp.ts` - MCP handler with 10 tools (7 sandbox management + 3 agentic)
+- `api/mcp.ts` - MCP handler with 8 tools (5 sandbox management + 3 agentic)
 - `lib/agent.ts` - Agent loop with Anthropic computer_use tool
 - `lib/cua-client.ts` - CUA Cloud API clients for sandbox and computer control
 
@@ -58,16 +58,16 @@ CUA key resolution order:
 1. `X-CUA-API-Key` request header
 2. `CUA_API_KEY` environment variable
 
-## Tool Categories (10 total)
+## Tool Categories (8 total)
 
-**Sandbox Management (7):**
+**Sandbox Management (5):**
 - `list_sandboxes` - List all sandboxes
 - `get_sandbox` - Get sandbox details
-- `create_sandbox` - Create new VM (linux/windows/macos)
 - `start_sandbox` - Start stopped sandbox
 - `stop_sandbox` - Stop running sandbox
 - `restart_sandbox` - Restart sandbox
-- `delete_sandbox` - Delete sandbox
+
+> Note: Create/delete sandboxes via [CUA Dashboard](https://cloud.trycua.com)
 
 **Agentic Tools (3):**
 - `describe_screen` - Vision-based screen description (no actions)

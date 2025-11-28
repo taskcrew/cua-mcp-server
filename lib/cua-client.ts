@@ -15,12 +15,6 @@ export interface Sandbox {
   os_type?: string;
 }
 
-export interface CreateSandboxOptions {
-  os: "linux" | "windows" | "macos";
-  size: "small" | "medium" | "large";
-  region: "north-america" | "europe" | "asia";
-}
-
 export interface CommandResult {
   success: boolean;
   content?: string;
@@ -76,13 +70,6 @@ export class CuaSandboxClient {
   }
 
   /**
-   * Create a new sandbox
-   */
-  async createSandbox(options: CreateSandboxOptions): Promise<Sandbox> {
-    return this.request<Sandbox>("POST", "/v1/vms", options);
-  }
-
-  /**
    * Start a sandbox
    */
   async startSandbox(name: string): Promise<{ name: string; status: string }> {
@@ -101,13 +88,6 @@ export class CuaSandboxClient {
    */
   async restartSandbox(name: string): Promise<{ name: string; status: string }> {
     return this.request("POST", `/v1/vms/${name}/restart`);
-  }
-
-  /**
-   * Delete a sandbox
-   */
-  async deleteSandbox(name: string): Promise<{ name: string; status: string }> {
-    return this.request("DELETE", `/v1/vms/${name}`);
   }
 }
 
