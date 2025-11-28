@@ -162,7 +162,7 @@ vercel --prod
 | `ANTHROPIC_API_KEY` | Anthropic API key for vision processing | Yes |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob token (auto-added) | Yes |
 | `CUA_API_BASE` | Custom API base URL (default: https://api.cua.ai) | No |
-| `CUA_MODEL` | Model to use: `claude-sonnet-4-5` (default) or `claude-opus-4-5` | No |
+| `CUA_MODEL` | Model to use: `claude-opus-4-5` (default) or `claude-sonnet-4-5` | No |
 
 ### Setting Up Vercel Blob
 
@@ -252,8 +252,8 @@ If you don't want to store the CUA API key on the server:
 
 | Model | Env Variable | Tool Version | Features |
 |-------|--------------|--------------|----------|
-| Claude Sonnet 4.5 (default) | `CUA_MODEL=claude-sonnet-4-5` | `computer_20250124` | Standard computer use |
-| Claude Opus 4.5 | `CUA_MODEL=claude-opus-4-5` | `computer_20251124` | + Zoom support |
+| Claude Opus 4.5 (default) | `CUA_MODEL=claude-opus-4-5` | `computer_20251124` | Zoom support, higher accuracy |
+| Claude Sonnet 4.5 | `CUA_MODEL=claude-sonnet-4-5` | `computer_20250124` | Faster, lower cost |
 
 ## Supported Computer Actions
 

@@ -68,8 +68,8 @@ const MODEL_CONFIGS: Record<string, ModelConfig> = {
   },
 };
 
-// Default to Sonnet, can be overridden via env
-const DEFAULT_MODEL = process.env.CUA_MODEL || "claude-sonnet-4-5";
+// Default to Opus 4.5 (better accuracy), can be overridden via env
+const DEFAULT_MODEL = process.env.CUA_MODEL || "claude-opus-4-5";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -269,7 +269,12 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
             switch (input.action) {
               case "screenshot": {
-                const result = await computer.screenshot();
+                let result = await computer.screenshot();
+                // Retry once on failure after 500ms
+                if (!result.success || !result.base64_image) {
+                  await sleep(500);
+                  result = await computer.screenshot();
+                }
                 if (result.success && result.base64_image) {
                   toolResultContent = [
                     {
@@ -497,7 +502,11 @@ Be efficient and direct. Verify your actions worked before moving on.`;
                   // Try region screenshot first, fall back to full screenshot if not supported
                   let result = await computer.screenshotRegion(x, y, ZOOM_REGION_WIDTH, ZOOM_REGION_HEIGHT);
 
-                  // If region screenshot failed (API might not support it), fall back to full
+                  // Retry once on failure, then fall back to full screenshot
+                  if (!result.success || !result.base64_image) {
+                    await sleep(500);
+                    result = await computer.screenshotRegion(x, y, ZOOM_REGION_WIDTH, ZOOM_REGION_HEIGHT);
+                  }
                   if (!result.success || !result.base64_image) {
                     result = await computer.screenshot();
                   }
@@ -713,9 +722,9 @@ Be efficient and direct. Verify your actions worked before moving on.`;
               content: toolResultContent,
             });
 
-            // Small delay for UI to update after action
-            if (input.action !== "screenshot") {
-              await sleep(300);
+            // Delay for UI to settle after action (500ms handles slower UI frameworks)
+            if (input.action !== "screenshot" && input.action !== "zoom") {
+              await sleep(500);
             }
           } catch (err) {
             stepRecord.success = false;
@@ -801,9 +810,18 @@ export async function describeScreen(
   const anthropic = new Anthropic({ apiKey: anthropicApiKey });
   const computer = new CuaComputerClient(sandboxName, host, cuaApiKey);
 
+  // Get model configuration
+  const modelKey = process.env.CUA_MODEL || DEFAULT_MODEL;
+  const modelConfig = MODEL_CONFIGS[modelKey] || MODEL_CONFIGS["claude-sonnet-4-5"];
+
   try {
-    // Take screenshot
-    const screenshotResult = await computer.screenshot();
+    // Take screenshot with retry
+    let screenshotResult = await computer.screenshot();
+    if (!screenshotResult.success || !screenshotResult.base64_image) {
+      // Retry once after 500ms
+      await sleep(500);
+      screenshotResult = await computer.screenshot();
+    }
     if (!screenshotResult.success || !screenshotResult.base64_image) {
       return {
         success: false,
@@ -825,7 +843,7 @@ export async function describeScreen(
 
     // Call Claude for description
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-5-20250929",
+      model: modelConfig.model,
       max_tokens: 1500,
       messages: [
         {

@@ -82,16 +82,16 @@ CUA key resolution order:
 | `ANTHROPIC_API_KEY` | Yes | Anthropic API key for vision |
 | `BLOB_READ_WRITE_TOKEN` | Yes | Vercel Blob token (auto-added) |
 | `CUA_API_BASE` | No | Custom API base URL |
-| `CUA_MODEL` | No | Model to use: `claude-sonnet-4-5` (default) or `claude-opus-4-5` |
+| `CUA_MODEL` | No | Model to use: `claude-opus-4-5` (default) or `claude-sonnet-4-5` |
 
 ## Model Support
 
 | Model | Tool Version | Beta Flag | Zoom Support |
 |-------|--------------|-----------|--------------|
-| Claude Sonnet 4.5 (default) | `computer_20250124` | `computer-use-2025-01-24` | No |
-| Claude Opus 4.5 | `computer_20251124` | `computer-use-2025-11-24` | Yes |
+| Claude Opus 4.5 (default) | `computer_20251124` | `computer-use-2025-11-24` | Yes |
+| Claude Sonnet 4.5 | `computer_20250124` | `computer-use-2025-01-24` | No |
 
-Set `CUA_MODEL=claude-opus-4-5` for Opus 4.5 with enhanced zoom capabilities.
+Set `CUA_MODEL=claude-sonnet-4-5` for Sonnet 4.5 (faster, lower cost).
 
 ## Supported Computer Actions
 
