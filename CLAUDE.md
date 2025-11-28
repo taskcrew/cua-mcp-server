@@ -26,25 +26,32 @@ Claude Code (Orchestrator)
     │ run_task("Open Chrome and go to google.com")
     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  CUA MCP Server (Agentic)                                   │
+│  CUA MCP Server (Non-Blocking)                              │
+│                                                             │
+│  1. Returns immediately: { task_id, status: "running" }     │
+│  2. Task executes in background via waitUntil               │
+│  3. Progress updates stored in Vercel Blob                  │
+│                                                             │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │  Internal Agent Loop                                  │  │
+│  │  Background Agent Loop                                │  │
 │  │  1. screenshot() → CUA sandbox                        │  │
 │  │  2. screenshot → Claude API (computer_use tool)       │  │
 │  │  3. Claude returns: click(x,y) / type("text") / done  │  │
-│  │  4. Execute action on sandbox                         │  │
+│  │  4. Execute action, update progress                   │  │
 │  │  5. Loop until complete                               │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
     │
     ▼
-{ success: true, summary: "Opened Chrome...", steps_taken: 5 }
-(TEXT ONLY - no images)
+Poll get_task_progress → { status, current_step, last_action }
+    │
+    ▼
+When complete → { status: "completed", result: { ... } }
 ```
 
 ### Key Files
 
-- `api/mcp.ts` - MCP handler with 8 tools (5 sandbox management + 3 agentic)
+- `api/mcp.ts` - MCP handler with 9 tools (5 sandbox management + 4 agentic)
 - `lib/agent.ts` - Agent loop with Anthropic computer_use tool
 - `lib/cua-client.ts` - CUA Cloud API clients for sandbox and computer control
 
@@ -58,7 +65,7 @@ CUA key resolution order:
 1. `X-CUA-API-Key` request header
 2. `CUA_API_KEY` environment variable
 
-## Tool Categories (8 total)
+## Tool Categories (9 total)
 
 **Sandbox Management (5):**
 - `list_sandboxes` - List all sandboxes
@@ -69,10 +76,44 @@ CUA key resolution order:
 
 > Note: Create/delete sandboxes via [CUA Dashboard](https://cloud.trycua.com)
 
-**Agentic Tools (3):**
+**Agentic Tools (4):**
 - `describe_screen` - Vision-based screen description (no actions)
 - `run_task` - Autonomous task execution with agent loop
+- `get_task_progress` - Poll progress of running tasks (step count, last action, reasoning)
 - `get_task_history` - Retrieve past task results from Vercel Blob
+
+## Progress Tracking
+
+During long-running tasks, the main agent can poll for progress using `get_task_progress`:
+
+```
+run_task returns: { task_id, progress_url, ... }
+       ↓
+Poll every 5-10 seconds: get_task_progress({ task_id, progress_url })
+       ↓
+Response (running):
+{
+  "task_id": "task_123",
+  "status": "running",
+  "progress": {
+    "current_step": 5,
+    "max_steps": 30,
+    "elapsed_ms": 45000,
+    "last_action": "left_click",
+    "last_reasoning": "I see a Submit button...",
+    "steps_summary": ["Click", "Type text", "Click"]
+  }
+}
+       ↓
+Response (completed):
+{
+  "task_id": "task_123",
+  "status": "completed",
+  "result": { "success": true, "summary": "...", "total_steps": 12 }
+}
+```
+
+Progress is stored in Vercel Blob at `progress/{task_id}.json` and updated after each action.
 
 ## Environment Variables
 

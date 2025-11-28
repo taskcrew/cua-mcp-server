@@ -7,7 +7,8 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { CuaComputerClient, CuaSandboxClient } from "./cua-client.js";
+import { put } from "@vercel/blob";
+import { CommandResult, CuaComputerClient, CuaSandboxClient } from "./cua-client.js";
 
 export interface AgentStep {
   step: number;
@@ -35,6 +36,35 @@ export interface ScreenDescription {
   description?: string;
   focus: string;
   error?: string;
+}
+
+export interface TaskProgress {
+  task_id: string;
+  sandbox_name: string;
+  task: string;
+  status: "running" | "completed" | "failed" | "timeout";
+  current_step: number;
+  max_steps: number;
+  started_at: number;
+  updated_at: number;
+  elapsed_ms: number;
+  timeout_seconds: number;
+  last_action?: {
+    action: string;
+    reasoning?: string;
+    result?: string;
+    success: boolean;
+    coordinates?: [number, number];
+  };
+  steps_summary: string[];
+  last_reasoning?: string;
+  final_result?: {
+    success: boolean;
+    summary: string;
+    total_steps: number;
+    duration_ms: number;
+    error?: string;
+  };
 }
 
 // Default display dimensions - will be overridden by actual screen size
@@ -77,31 +107,196 @@ function sleep(ms: number): Promise<void> {
 
 async function getScreenDimensions(computer: CuaComputerClient): Promise<{ width: number; height: number }> {
   try {
-    const result = await computer.getScreenSize();
-    if (result.success && result.content) {
-      // Parse screen size from response (e.g., "1920x1080" or JSON)
-      const match = result.content.match(/(\d+)\s*[x×,]\s*(\d+)/i);
-      if (match) {
-        return { width: parseInt(match[1]), height: parseInt(match[2]) };
+    const result = await computer.getScreenSize() as CommandResult & { size?: { width: number; height: number } };
+    console.log("[Agent] get_screen_size result:", JSON.stringify(result));
+
+    if (result.success) {
+      // CUA SDK returns { success: true, size: { width, height } }
+      if (result.size?.width && result.size?.height) {
+        const dims = { width: result.size.width, height: result.size.height };
+        console.log("[Agent] Screen dimensions from size field:", dims);
+        return dims;
       }
-      // Try parsing as JSON
-      try {
-        const parsed = JSON.parse(result.content);
-        if (parsed.width && parsed.height) {
-          return { width: parsed.width, height: parsed.height };
+
+      // Fallback: parse from content string (legacy/alternate format)
+      if (result.content) {
+        // Try regex for "1920x1080" format
+        const match = result.content.match(/(\d+)\s*[x×,]\s*(\d+)/i);
+        if (match) {
+          const dims = { width: parseInt(match[1]), height: parseInt(match[2]) };
+          console.log("[Agent] Parsed screen dimensions from string:", dims);
+          return dims;
         }
-      } catch {}
+        // Try parsing content as JSON
+        try {
+          const parsed = JSON.parse(result.content);
+          if (parsed.size?.width && parsed.size?.height) {
+            const dims = { width: parsed.size.width, height: parsed.size.height };
+            console.log("[Agent] Parsed screen dimensions from JSON (size):", dims);
+            return dims;
+          }
+          if (parsed.width && parsed.height) {
+            const dims = { width: parsed.width, height: parsed.height };
+            console.log("[Agent] Parsed screen dimensions from JSON (direct):", dims);
+            return dims;
+          }
+        } catch {}
+      }
     }
-  } catch {}
+    console.log("[Agent] Failed to parse screen size, using defaults");
+  } catch (err) {
+    console.log("[Agent] Error getting screen size:", err);
+  }
   return { width: DEFAULT_DISPLAY_WIDTH, height: DEFAULT_DISPLAY_HEIGHT };
 }
 
-function generateTaskId(): string {
+export function generateTaskId(): string {
   return `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
 /**
+ * Update progress in Vercel Blob storage (fire-and-forget)
+ */
+async function updateProgress(
+  taskId: string,
+  progress: TaskProgress
+): Promise<string | undefined> {
+  try {
+    const blob = await put(
+      `progress/${taskId}.json`,
+      JSON.stringify(progress),
+      { access: "public", addRandomSuffix: false }
+    );
+    return blob.url;
+  } catch (err) {
+    console.error("[Agent] Failed to update progress:", err);
+    return undefined;
+  }
+}
+
+/**
+ * Initialize progress tracking for a new task
+ * Returns the progress URL for polling
+ */
+export async function initializeProgress(
+  taskId: string,
+  sandboxName: string,
+  task: string,
+  maxSteps: number,
+  timeoutSeconds: number
+): Promise<string | undefined> {
+  const progress: TaskProgress = {
+    task_id: taskId,
+    sandbox_name: sandboxName,
+    task,
+    status: "running",
+    current_step: 0,
+    max_steps: maxSteps,
+    started_at: Date.now(),
+    updated_at: Date.now(),
+    elapsed_ms: 0,
+    timeout_seconds: timeoutSeconds,
+    steps_summary: [],
+  };
+  return updateProgress(taskId, progress);
+}
+
+/**
+ * Execute a task in the background (for non-blocking mode)
+ * Wraps executeTask with error handling and result storage
+ */
+export async function executeTaskInBackground(
+  taskId: string,
+  progressUrl: string,
+  sandboxName: string,
+  host: string,
+  cuaApiKey: string,
+  anthropicApiKey: string,
+  task: string,
+  maxSteps: number,
+  timeoutSeconds: number
+): Promise<void> {
+  try {
+    const result = await executeTask(
+      sandboxName,
+      host,
+      cuaApiKey,
+      anthropicApiKey,
+      task,
+      maxSteps,
+      timeoutSeconds,
+      taskId,
+      progressUrl
+    );
+
+    // Store final result in Blob
+    await put(`tasks/${taskId}.json`, JSON.stringify(result), {
+      access: "public",
+      addRandomSuffix: false,
+    });
+  } catch (err) {
+    console.error(`[Agent] Background task ${taskId} failed:`, err);
+
+    // Update progress with error
+    const errorProgress: TaskProgress = {
+      task_id: taskId,
+      sandbox_name: sandboxName,
+      task,
+      status: "failed",
+      current_step: 0,
+      max_steps: maxSteps,
+      started_at: Date.now(),
+      updated_at: Date.now(),
+      elapsed_ms: 0,
+      timeout_seconds: timeoutSeconds,
+      steps_summary: [],
+      final_result: {
+        success: false,
+        summary: `Background execution failed: ${err instanceof Error ? err.message : String(err)}`,
+        total_steps: 0,
+        duration_ms: 0,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    };
+    await put(`progress/${taskId}.json`, JSON.stringify(errorProgress), {
+      access: "public",
+      addRandomSuffix: false,
+    });
+  }
+}
+
+/**
+ * Create a human-readable summary of an action
+ */
+function summarizeAction(
+  action: string,
+  result?: string,
+  coords?: [number, number]
+): string {
+  const coordStr = coords ? ` at (${coords[0]}, ${coords[1]})` : "";
+  switch (action) {
+    case "left_click": return `Click${coordStr}`;
+    case "right_click": return `Right-click${coordStr}`;
+    case "double_click": return `Double-click${coordStr}`;
+    case "triple_click": return `Triple-click${coordStr}`;
+    case "middle_click": return `Middle-click${coordStr}`;
+    case "type": return "Type text";
+    case "key": return "Key press";
+    case "scroll": return "Scroll";
+    case "run_command": return "Run command";
+    case "mouse_move": return `Move cursor${coordStr}`;
+    case "left_click_drag": return "Drag";
+    case "read_file": return "Read file";
+    case "write_file": return "Write file";
+    case "list_directory": return "List directory";
+    default: return action.replace(/_/g, " ");
+  }
+}
+
+/**
  * Execute a task autonomously using computer use agent loop
+ * @param existingTaskId - Optional pre-generated task ID (for non-blocking mode)
+ * @param existingProgressUrl - Optional pre-initialized progress URL (for non-blocking mode)
  */
 export async function executeTask(
   sandboxName: string,
@@ -110,13 +305,40 @@ export async function executeTask(
   anthropicApiKey: string,
   task: string,
   maxSteps: number = 30,
-  timeoutSeconds: number = 280
-): Promise<TaskResult> {
-  const taskId = generateTaskId();
+  timeoutSeconds: number = 280,
+  existingTaskId?: string,
+  existingProgressUrl?: string
+): Promise<TaskResult & { progress_url?: string }> {
+  const taskId = existingTaskId || generateTaskId();
   const startTime = Date.now();
   const steps: AgentStep[] = [];
+  let progressUrl: string | undefined = existingProgressUrl;
+  let lastReasoning: string | undefined;
 
-  const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+  // Initialize progress tracking (only if not pre-initialized)
+  const progress: TaskProgress = {
+    task_id: taskId,
+    sandbox_name: sandboxName,
+    task,
+    status: "running",
+    current_step: 0,
+    max_steps: maxSteps,
+    started_at: startTime,
+    updated_at: startTime,
+    elapsed_ms: 0,
+    timeout_seconds: timeoutSeconds,
+    steps_summary: [],
+  };
+
+  // Store initial progress (only if not pre-initialized)
+  if (!existingProgressUrl) {
+    progressUrl = await updateProgress(taskId, progress);
+  }
+
+  const anthropic = new Anthropic({
+    apiKey: anthropicApiKey,
+    maxRetries: 4,  // Default is 2, increase for long-running tasks
+  });
   const computer = new CuaComputerClient(sandboxName, host, cuaApiKey);
 
   // Get actual screen dimensions from sandbox
@@ -169,6 +391,19 @@ Be efficient and direct. Verify your actions worked before moving on.`;
     // Check timeout
     const elapsed = Date.now() - startTime;
     if (elapsed > timeoutSeconds * 1000) {
+      // Update final progress
+      progress.status = "timeout";
+      progress.updated_at = Date.now();
+      progress.elapsed_ms = elapsed;
+      progress.final_result = {
+        success: false,
+        summary: "Task timed out",
+        total_steps: steps.length,
+        duration_ms: elapsed,
+        error: `Timeout after ${timeoutSeconds}s`,
+      };
+      await updateProgress(taskId, progress);
+
       return {
         task_id: taskId,
         success: false,
@@ -178,6 +413,7 @@ Be efficient and direct. Verify your actions worked before moving on.`;
         duration_ms: elapsed,
         screen_size: { width: displayWidth, height: displayHeight },
         error: `Timeout after ${timeoutSeconds}s`,
+        progress_url: progressUrl,
       };
     }
 
@@ -215,28 +451,65 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
       for (const block of response.content) {
         if (block.type === "text") {
+          // Capture reasoning from Claude's text (before any completion markers)
+          if (!block.text.includes("TASK_COMPLETE:") && !block.text.includes("TASK_FAILED:")) {
+            lastReasoning = block.text.trim();
+          }
+
           // Check for task completion
           if (block.text.includes("TASK_COMPLETE:")) {
             const summary = block.text.split("TASK_COMPLETE:")[1].trim();
+            const durationMs = Date.now() - startTime;
+
+            // Update final progress
+            progress.status = "completed";
+            progress.updated_at = Date.now();
+            progress.elapsed_ms = durationMs;
+            progress.final_result = {
+              success: true,
+              summary,
+              total_steps: steps.length,
+              duration_ms: durationMs,
+            };
+            await updateProgress(taskId, progress);
+
             return {
               task_id: taskId,
               success: true,
               summary,
               steps,
               steps_taken: steps.length,
-              duration_ms: Date.now() - startTime,
+              duration_ms: durationMs,
+              screen_size: { width: displayWidth, height: displayHeight },
+              progress_url: progressUrl,
             };
           }
           if (block.text.includes("TASK_FAILED:")) {
             const reason = block.text.split("TASK_FAILED:")[1].trim();
+            const durationMs = Date.now() - startTime;
+
+            // Update final progress
+            progress.status = "failed";
+            progress.updated_at = Date.now();
+            progress.elapsed_ms = durationMs;
+            progress.final_result = {
+              success: false,
+              summary: reason,
+              total_steps: steps.length,
+              duration_ms: durationMs,
+              error: "Task failed",
+            };
+            await updateProgress(taskId, progress);
+
             return {
               task_id: taskId,
               success: false,
               summary: reason,
               steps,
               steps_taken: steps.length,
-              duration_ms: Date.now() - startTime,
+              duration_ms: durationMs,
               error: "Task failed",
+              progress_url: progressUrl,
             };
           }
         }
@@ -296,8 +569,15 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
               case "mouse_move": {
                 if (input.coordinate) {
-                  await computer.moveCursor(input.coordinate[0], input.coordinate[1]);
-                  toolResultContent = "Cursor moved";
+                  const [x, y] = input.coordinate;
+                  const result = await computer.moveCursor(x, y);
+                  if (result.success) {
+                    toolResultContent = `Cursor moved to (${x}, ${y})`;
+                  } else {
+                    toolResultContent = `Move cursor failed: ${result.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = result.error;
+                  }
                 } else {
                   toolResultContent = "mouse_move requires coordinate";
                   stepRecord.success = false;
@@ -308,8 +588,14 @@ Be efficient and direct. Verify your actions worked before moving on.`;
               case "left_click": {
                 if (input.coordinate) {
                   const [x, y] = input.coordinate;
-                  await computer.leftClick(x, y);
-                  toolResultContent = `Left click at (${x}, ${y})`;
+                  const result = await computer.leftClick(x, y);
+                  if (result.success) {
+                    toolResultContent = `Left click at (${x}, ${y})`;
+                  } else {
+                    toolResultContent = `Left click failed: ${result.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = result.error;
+                  }
                 } else {
                   toolResultContent = "left_click requires coordinate";
                   stepRecord.success = false;
@@ -319,16 +605,33 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
               case "right_click": {
                 if (input.coordinate) {
-                  await computer.rightClick(input.coordinate[0], input.coordinate[1]);
+                  const [x, y] = input.coordinate;
+                  const result = await computer.rightClick(x, y);
+                  if (result.success) {
+                    toolResultContent = `Right click at (${x}, ${y})`;
+                  } else {
+                    toolResultContent = `Right click failed: ${result.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = result.error;
+                  }
+                } else {
+                  toolResultContent = "right_click requires coordinate";
+                  stepRecord.success = false;
                 }
-                toolResultContent = "Right click performed";
                 break;
               }
 
               case "double_click": {
                 if (input.coordinate) {
-                  await computer.doubleClick(input.coordinate[0], input.coordinate[1]);
-                  toolResultContent = `Double click at (${input.coordinate[0]}, ${input.coordinate[1]})`;
+                  const [x, y] = input.coordinate;
+                  const result = await computer.doubleClick(x, y);
+                  if (result.success) {
+                    toolResultContent = `Double click at (${x}, ${y})`;
+                  } else {
+                    toolResultContent = `Double click failed: ${result.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = result.error;
+                  }
                 } else {
                   toolResultContent = "double_click requires coordinate";
                   stepRecord.success = false;
@@ -338,8 +641,15 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
               case "triple_click": {
                 if (input.coordinate) {
-                  await computer.tripleClick(input.coordinate[0], input.coordinate[1]);
-                  toolResultContent = `Triple click at (${input.coordinate[0]}, ${input.coordinate[1]})`;
+                  const [x, y] = input.coordinate;
+                  const result = await computer.tripleClick(x, y);
+                  if (result.success) {
+                    toolResultContent = `Triple click at (${x}, ${y})`;
+                  } else {
+                    toolResultContent = `Triple click failed: ${result.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = result.error;
+                  }
                 } else {
                   toolResultContent = "triple_click requires coordinate";
                   stepRecord.success = false;
@@ -349,8 +659,15 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
               case "middle_click": {
                 if (input.coordinate) {
-                  await computer.middleClick(input.coordinate[0], input.coordinate[1]);
-                  toolResultContent = `Middle click at (${input.coordinate[0]}, ${input.coordinate[1]})`;
+                  const [x, y] = input.coordinate;
+                  const result = await computer.middleClick(x, y);
+                  if (result.success) {
+                    toolResultContent = `Middle click at (${x}, ${y})`;
+                  } else {
+                    toolResultContent = `Middle click failed: ${result.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = result.error;
+                  }
                 } else {
                   toolResultContent = "middle_click requires coordinate";
                   stepRecord.success = false;
@@ -364,8 +681,14 @@ Be efficient and direct. Verify your actions worked before moving on.`;
                 const endCoord = input.coordinate;
 
                 if (startCoord && endCoord) {
-                  await computer.drag(startCoord[0], startCoord[1], endCoord[0], endCoord[1]);
-                  toolResultContent = `Dragged from (${startCoord[0]}, ${startCoord[1]}) to (${endCoord[0]}, ${endCoord[1]})`;
+                  const result = await computer.drag(startCoord[0], startCoord[1], endCoord[0], endCoord[1]);
+                  if (result.success) {
+                    toolResultContent = `Dragged from (${startCoord[0]}, ${startCoord[1]}) to (${endCoord[0]}, ${endCoord[1]})`;
+                  } else {
+                    toolResultContent = `Drag failed: ${result.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = result.error;
+                  }
                 } else {
                   toolResultContent = "left_click_drag requires start_coordinate and coordinate";
                   stepRecord.success = false;
@@ -413,8 +736,14 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
               case "type": {
                 if (input.text) {
-                  await computer.typeText(input.text);
-                  toolResultContent = "Text typed";
+                  const result = await computer.typeText(input.text);
+                  if (result.success) {
+                    toolResultContent = "Text typed";
+                  } else {
+                    toolResultContent = `Type failed: ${result.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = result.error;
+                  }
                 } else {
                   toolResultContent = "type requires text";
                   stepRecord.success = false;
@@ -425,13 +754,20 @@ Be efficient and direct. Verify your actions worked before moving on.`;
               case "key": {
                 if (input.text) {
                   // Handle key combinations like "ctrl+c"
+                  let result;
                   if (input.text.includes("+")) {
                     const keys = input.text.split("+").map((k) => k.trim());
-                    await computer.hotkey(keys);
+                    result = await computer.hotkey(keys);
                   } else {
-                    await computer.pressKey(input.text);
+                    result = await computer.pressKey(input.text);
                   }
-                  toolResultContent = "Key pressed";
+                  if (result.success) {
+                    toolResultContent = `Key pressed: ${input.text}`;
+                  } else {
+                    toolResultContent = `Key press failed: ${result.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = result.error;
+                  }
                 } else {
                   toolResultContent = "key requires text";
                   stepRecord.success = false;
@@ -445,32 +781,46 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
                 // Move to scroll position first (if coordinate provided)
                 if (input.coordinate) {
-                  await computer.moveCursor(input.coordinate[0], input.coordinate[1]);
+                  const moveResult = await computer.moveCursor(input.coordinate[0], input.coordinate[1]);
+                  if (!moveResult.success) {
+                    toolResultContent = `Move cursor for scroll failed: ${moveResult.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = moveResult.error;
+                    break;
+                  }
                 }
 
                 // Execute scroll in the specified direction
+                let scrollResult;
                 switch (direction) {
                   case "down":
-                    await computer.scrollDown(amount);
+                    scrollResult = await computer.scrollDown(amount);
                     break;
                   case "up":
-                    await computer.scrollUp(amount);
+                    scrollResult = await computer.scrollUp(amount);
                     break;
                   case "left":
-                    await computer.scrollLeft(amount);
+                    scrollResult = await computer.scrollLeft(amount);
                     break;
                   case "right":
-                    await computer.scrollRight(amount);
+                    scrollResult = await computer.scrollRight(amount);
                     break;
                   default:
                     toolResultContent = `Unknown scroll direction: ${direction}`;
                     stepRecord.success = false;
+                    break;
                 }
 
-                if (stepRecord.success) {
-                  toolResultContent = input.coordinate
-                    ? `Scrolled ${direction} at (${input.coordinate[0]}, ${input.coordinate[1]})`
-                    : `Scrolled ${direction}`;
+                if (scrollResult) {
+                  if (scrollResult.success) {
+                    toolResultContent = input.coordinate
+                      ? `Scrolled ${direction} at (${input.coordinate[0]}, ${input.coordinate[1]})`
+                      : `Scrolled ${direction}`;
+                  } else {
+                    toolResultContent = `Scroll failed: ${scrollResult.error || "Unknown error"}`;
+                    stepRecord.success = false;
+                    stepRecord.error = scrollResult.error;
+                  }
                 }
                 break;
               }
@@ -714,7 +1064,40 @@ Be efficient and direct. Verify your actions worked before moving on.`;
               stepRecord.result = toolResultContent;
             }
 
+            // Store reasoning in step record
+            if (lastReasoning) {
+              stepRecord.reasoning = lastReasoning;
+            }
+
             steps.push(stepRecord);
+
+            // Update progress for meaningful actions (not screenshots/zoom)
+            if (input.action !== "screenshot" && input.action !== "zoom") {
+              const now = Date.now();
+              progress.current_step = steps.length;
+              progress.updated_at = now;
+              progress.elapsed_ms = now - startTime;
+              progress.last_action = {
+                action: input.action,
+                reasoning: lastReasoning,
+                result: typeof toolResultContent === "string" ? toolResultContent : undefined,
+                success: stepRecord.success,
+                coordinates: input.coordinate,
+              };
+              progress.last_reasoning = lastReasoning;
+
+              // Maintain rolling summary (last 5 actions)
+              const summary = summarizeAction(input.action, stepRecord.result, input.coordinate);
+              progress.steps_summary.push(summary);
+              if (progress.steps_summary.length > 5) {
+                progress.steps_summary.shift();
+              }
+
+              // Fire-and-forget progress update (don't block agent loop)
+              updateProgress(taskId, progress).catch((err) => {
+                console.error(`[Agent] Progress update failed for step ${steps.length}:`, err);
+              });
+            }
 
             toolResults.push({
               type: "tool_result",
@@ -761,28 +1144,77 @@ Be efficient and direct. Verify your actions worked before moving on.`;
       if (response.stop_reason === "end_turn" && toolResults.length === 0) {
         // Check final text for any summary
         const lastText = response.content.find((b) => b.type === "text");
+        const summaryText = lastText?.type === "text" ? lastText.text : "Task completed";
+        const durationMs = Date.now() - startTime;
+
+        // Update final progress
+        progress.status = "completed";
+        progress.updated_at = Date.now();
+        progress.elapsed_ms = durationMs;
+        progress.final_result = {
+          success: true,
+          summary: summaryText,
+          total_steps: steps.length,
+          duration_ms: durationMs,
+        };
+        await updateProgress(taskId, progress);
+
         return {
           task_id: taskId,
           success: true,
-          summary: lastText?.type === "text" ? lastText.text : "Task completed",
+          summary: summaryText,
           steps,
           steps_taken: steps.length,
-          duration_ms: Date.now() - startTime,
+          duration_ms: durationMs,
+          screen_size: { width: displayWidth, height: displayHeight },
+          progress_url: progressUrl,
         };
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
+      const durationMs = Date.now() - startTime;
+
+      // Update final progress
+      progress.status = "failed";
+      progress.updated_at = Date.now();
+      progress.elapsed_ms = durationMs;
+      progress.final_result = {
+        success: false,
+        summary: `Agent error: ${errorMsg}`,
+        total_steps: steps.length,
+        duration_ms: durationMs,
+        error: errorMsg,
+      };
+      await updateProgress(taskId, progress);
+
       return {
         task_id: taskId,
         success: false,
         summary: `Agent error: ${errorMsg}`,
         steps,
         steps_taken: steps.length,
-        duration_ms: Date.now() - startTime,
+        duration_ms: durationMs,
+        screen_size: { width: displayWidth, height: displayHeight },
         error: errorMsg,
+        progress_url: progressUrl,
       };
     }
   }
+
+  const durationMs = Date.now() - startTime;
+
+  // Update final progress
+  progress.status = "failed";
+  progress.updated_at = Date.now();
+  progress.elapsed_ms = durationMs;
+  progress.final_result = {
+    success: false,
+    summary: "Max steps exceeded without completing task",
+    total_steps: steps.length,
+    duration_ms: durationMs,
+    error: `Reached ${maxSteps} step limit`,
+  };
+  await updateProgress(taskId, progress);
 
   return {
     task_id: taskId,
@@ -790,9 +1222,10 @@ Be efficient and direct. Verify your actions worked before moving on.`;
     summary: "Max steps exceeded without completing task",
     steps,
     steps_taken: steps.length,
-    duration_ms: Date.now() - startTime,
+    duration_ms: durationMs,
     screen_size: { width: displayWidth, height: displayHeight },
     error: `Reached ${maxSteps} step limit`,
+    progress_url: progressUrl,
   };
 }
 
@@ -807,7 +1240,10 @@ export async function describeScreen(
   focus: "ui" | "text" | "full" = "ui",
   question?: string
 ): Promise<ScreenDescription> {
-  const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+  const anthropic = new Anthropic({
+    apiKey: anthropicApiKey,
+    maxRetries: 4,  // Default is 2, increase for reliability
+  });
   const computer = new CuaComputerClient(sandboxName, host, cuaApiKey);
 
   // Get model configuration

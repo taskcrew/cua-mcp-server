@@ -1,11 +1,16 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { waitUntil } from "@vercel/functions";
 import { put, head } from "@vercel/blob";
 import { CuaSandboxClient } from "../lib/cua-client.js";
 import {
   executeTask,
+  executeTaskInBackground,
   describeScreen,
   getSandboxHost,
+  generateTaskId,
+  initializeProgress,
   type TaskResult,
+  type TaskProgress,
 } from "../lib/agent.js";
 
 // MCP Protocol Types
@@ -184,6 +189,25 @@ const TOOLS: Tool[] = [
       required: ["task_id"],
     },
   },
+  {
+    name: "get_task_progress",
+    description:
+      "Check the progress of a running task. Returns current step, last action, and status. For completed tasks, includes the final result. Poll this every 5-10 seconds during long-running tasks.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: {
+          type: "string",
+          description: "The task ID returned from run_task",
+        },
+        progress_url: {
+          type: "string",
+          description: "The progress_url returned from run_task (preferred for faster lookup)",
+        },
+      },
+      required: ["task_id"],
+    },
+  },
 ];
 
 // Get API keys from environment or request headers
@@ -194,6 +218,35 @@ function getApiKey(req: VercelRequest): string {
 
 function getAnthropicApiKey(): string {
   return process.env.ANTHROPIC_API_KEY || "";
+}
+
+// Format progress response for get_task_progress
+function formatProgressResponse(progress: TaskProgress) {
+  if (
+    progress.status === "completed" ||
+    progress.status === "failed" ||
+    progress.status === "timeout"
+  ) {
+    return {
+      task_id: progress.task_id,
+      status: progress.status,
+      result: progress.final_result,
+    };
+  }
+
+  return {
+    task_id: progress.task_id,
+    status: progress.status,
+    progress: {
+      current_step: progress.current_step,
+      max_steps: progress.max_steps,
+      elapsed_ms: progress.elapsed_ms,
+      timeout_seconds: progress.timeout_seconds,
+      last_action: progress.last_action?.action,
+      last_reasoning: progress.last_reasoning,
+      steps_summary: progress.steps_summary,
+    },
+  };
 }
 
 // Tool execution handler
@@ -287,8 +340,20 @@ async function executeTool(
         };
       }
 
-      // Execute the task
-      const result = await executeTask(
+      // Generate task ID and initialize progress BEFORE returning
+      const taskId = generateTaskId();
+      const progressUrl = await initializeProgress(
+        taskId,
+        sandboxName,
+        task,
+        maxSteps,
+        timeoutSeconds
+      );
+
+      // Schedule background execution using waitUntil
+      const backgroundTask = executeTaskInBackground(
+        taskId,
+        progressUrl || "",
         sandboxName,
         host,
         cuaApiKey,
@@ -298,28 +363,15 @@ async function executeTool(
         timeoutSeconds
       );
 
-      // Store result in Vercel Blob for later retrieval
-      let historyUrl: string | undefined;
-      try {
-        const blob = await put(`tasks/${result.task_id}.json`, JSON.stringify(result), {
-          access: "public",
-          addRandomSuffix: false,
-        });
-        historyUrl = blob.url;
-      } catch (blobError) {
-        // Blob storage failure is non-critical - task still completed
-        console.error("Failed to store task result in Blob:", blobError);
-      }
+      // Use Vercel's waitUntil to continue execution after response
+      waitUntil(backgroundTask);
 
-      // Return text-only summary (no images)
+      // Return immediately with "running" status
       return {
-        task_id: result.task_id,
-        success: result.success,
-        summary: result.summary,
-        steps_taken: result.steps_taken,
-        duration_ms: result.duration_ms,
-        error: result.error,
-        history_url: historyUrl,
+        task_id: taskId,
+        status: "running",
+        progress_url: progressUrl,
+        message: "Task started. Poll get_task_progress for updates.",
       };
     }
 
@@ -349,6 +401,56 @@ async function executeTool(
         return {
           success: false,
           error: `Failed to retrieve task: ${blobError instanceof Error ? blobError.message : "Unknown error"}`,
+        };
+      }
+    }
+
+    case "get_task_progress": {
+      const taskId = args.task_id as string;
+      const progressUrl = args.progress_url as string | undefined;
+
+      try {
+        // Try progress URL first (faster)
+        if (progressUrl) {
+          const response = await fetch(progressUrl);
+          if (response.ok) {
+            const progress = (await response.json()) as TaskProgress;
+            return formatProgressResponse(progress);
+          }
+        }
+
+        // Fall back to blob head lookup
+        const blobInfo = await head(`progress/${taskId}.json`);
+        if (blobInfo) {
+          const response = await fetch(blobInfo.url);
+          const progress = (await response.json()) as TaskProgress;
+          return formatProgressResponse(progress);
+        }
+
+        // Check if task completed (progress might be stale but task finished)
+        const resultInfo = await head(`tasks/${taskId}.json`);
+        if (resultInfo) {
+          const response = await fetch(resultInfo.url);
+          const result = (await response.json()) as TaskResult;
+          return {
+            task_id: taskId,
+            status: result.success ? "completed" : "failed",
+            result: {
+              success: result.success,
+              summary: result.summary,
+              total_steps: result.steps_taken,
+              duration_ms: result.duration_ms,
+              error: result.error,
+            },
+          };
+        }
+
+        return { task_id: taskId, status: "not_found" };
+      } catch (err) {
+        return {
+          task_id: taskId,
+          status: "error",
+          error: err instanceof Error ? err.message : "Unknown error",
         };
       }
     }

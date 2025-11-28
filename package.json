@@ -9,10 +9,11 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@vercel/blob": "^0.27.0"
+    "@vercel/blob": "^0.27.0",
+    "@vercel/functions": "^3.3.4"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/node": "^22.19.1",
     "@vercel/node": "^3.2.29",
     "typescript": "^5.3.0"
   },

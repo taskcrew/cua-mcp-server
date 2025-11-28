@@ -233,7 +233,10 @@ export class CuaComputerClient {
    */
   async leftClick(x: number, y: number): Promise<CommandResult> {
     // CUA API requires move_cursor first, then left_click (which takes no params)
-    await this.sendCommand("move_cursor", { x, y });
+    const moveResult = await this.sendCommand("move_cursor", { x, y });
+    if (!moveResult.success) {
+      return { success: false, error: `Move cursor failed: ${moveResult.error}` };
+    }
     return this.sendCommand("left_click", {});
   }
 
@@ -241,7 +244,10 @@ export class CuaComputerClient {
    * Right click at coordinates (moves cursor first, then clicks)
    */
   async rightClick(x: number, y: number): Promise<CommandResult> {
-    await this.sendCommand("move_cursor", { x, y });
+    const moveResult = await this.sendCommand("move_cursor", { x, y });
+    if (!moveResult.success) {
+      return { success: false, error: `Move cursor failed: ${moveResult.error}` };
+    }
     return this.sendCommand("right_click", {});
   }
 
@@ -249,7 +255,10 @@ export class CuaComputerClient {
    * Double click at coordinates (moves cursor first, then clicks)
    */
   async doubleClick(x: number, y: number): Promise<CommandResult> {
-    await this.sendCommand("move_cursor", { x, y });
+    const moveResult = await this.sendCommand("move_cursor", { x, y });
+    if (!moveResult.success) {
+      return { success: false, error: `Move cursor failed: ${moveResult.error}` };
+    }
     return this.sendCommand("double_click", {});
   }
 
@@ -257,7 +266,10 @@ export class CuaComputerClient {
    * Triple click at coordinates (moves cursor first, then clicks)
    */
   async tripleClick(x: number, y: number): Promise<CommandResult> {
-    await this.sendCommand("move_cursor", { x, y });
+    const moveResult = await this.sendCommand("move_cursor", { x, y });
+    if (!moveResult.success) {
+      return { success: false, error: `Move cursor failed: ${moveResult.error}` };
+    }
     return this.sendCommand("triple_click", {});
   }
 
@@ -265,7 +277,10 @@ export class CuaComputerClient {
    * Middle click at coordinates (moves cursor first, then clicks)
    */
   async middleClick(x: number, y: number): Promise<CommandResult> {
-    await this.sendCommand("move_cursor", { x, y });
+    const moveResult = await this.sendCommand("move_cursor", { x, y });
+    if (!moveResult.success) {
+      return { success: false, error: `Move cursor failed: ${moveResult.error}` };
+    }
     return this.sendCommand("middle_click", {});
   }
 
@@ -287,9 +302,20 @@ export class CuaComputerClient {
    * Click and drag from current position to target coordinates
    */
   async drag(startX: number, startY: number, endX: number, endY: number): Promise<CommandResult> {
-    await this.sendCommand("move_cursor", { x: startX, y: startY });
-    await this.sendCommand("mouse_down", {});
-    await this.sendCommand("move_cursor", { x: endX, y: endY });
+    const moveStartResult = await this.sendCommand("move_cursor", { x: startX, y: startY });
+    if (!moveStartResult.success) {
+      return { success: false, error: `Move to start failed: ${moveStartResult.error}` };
+    }
+    const mouseDownResult = await this.sendCommand("mouse_down", {});
+    if (!mouseDownResult.success) {
+      return { success: false, error: `Mouse down failed: ${mouseDownResult.error}` };
+    }
+    const moveEndResult = await this.sendCommand("move_cursor", { x: endX, y: endY });
+    if (!moveEndResult.success) {
+      // Try to release mouse button before returning error
+      await this.sendCommand("mouse_up", {});
+      return { success: false, error: `Move to end failed: ${moveEndResult.error}` };
+    }
     return this.sendCommand("mouse_up", {});
   }
 
