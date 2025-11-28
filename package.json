@@ -1,0 +1,22 @@
+{
+  "name": "cua-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server for CUA Cloud - Virtual Machine sandbox management and computer control",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@vercel/blob": "^0.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@vercel/node": "^3.2.29",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
