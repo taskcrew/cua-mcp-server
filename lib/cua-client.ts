@@ -229,59 +229,49 @@ export class CuaComputerClient {
   }
 
   /**
-   * Left click at coordinates (moves cursor first, then clicks)
+   * Helper to move cursor and perform a click action
    */
-  async leftClick(x: number, y: number): Promise<CommandResult> {
-    // CUA API requires move_cursor first, then left_click (which takes no params)
+  private async clickAt(x: number, y: number, clickType: string): Promise<CommandResult> {
     const moveResult = await this.sendCommand("move_cursor", { x, y });
     if (!moveResult.success) {
       return { success: false, error: `Move cursor failed: ${moveResult.error}` };
     }
-    return this.sendCommand("left_click", {});
+    return this.sendCommand(clickType, {});
+  }
+
+  /**
+   * Left click at coordinates (moves cursor first, then clicks)
+   */
+  async leftClick(x: number, y: number): Promise<CommandResult> {
+    return this.clickAt(x, y, "left_click");
   }
 
   /**
    * Right click at coordinates (moves cursor first, then clicks)
    */
   async rightClick(x: number, y: number): Promise<CommandResult> {
-    const moveResult = await this.sendCommand("move_cursor", { x, y });
-    if (!moveResult.success) {
-      return { success: false, error: `Move cursor failed: ${moveResult.error}` };
-    }
-    return this.sendCommand("right_click", {});
+    return this.clickAt(x, y, "right_click");
   }
 
   /**
    * Double click at coordinates (moves cursor first, then clicks)
    */
   async doubleClick(x: number, y: number): Promise<CommandResult> {
-    const moveResult = await this.sendCommand("move_cursor", { x, y });
-    if (!moveResult.success) {
-      return { success: false, error: `Move cursor failed: ${moveResult.error}` };
-    }
-    return this.sendCommand("double_click", {});
+    return this.clickAt(x, y, "double_click");
   }
 
   /**
    * Triple click at coordinates (moves cursor first, then clicks)
    */
   async tripleClick(x: number, y: number): Promise<CommandResult> {
-    const moveResult = await this.sendCommand("move_cursor", { x, y });
-    if (!moveResult.success) {
-      return { success: false, error: `Move cursor failed: ${moveResult.error}` };
-    }
-    return this.sendCommand("triple_click", {});
+    return this.clickAt(x, y, "triple_click");
   }
 
   /**
    * Middle click at coordinates (moves cursor first, then clicks)
    */
   async middleClick(x: number, y: number): Promise<CommandResult> {
-    const moveResult = await this.sendCommand("move_cursor", { x, y });
-    if (!moveResult.success) {
-      return { success: false, error: `Move cursor failed: ${moveResult.error}` };
-    }
-    return this.sendCommand("middle_click", {});
+    return this.clickAt(x, y, "middle_click");
   }
 
   /**
