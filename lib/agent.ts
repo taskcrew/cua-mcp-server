@@ -71,6 +71,10 @@ export interface TaskProgress {
 const DEFAULT_DISPLAY_WIDTH = 1024;
 const DEFAULT_DISPLAY_HEIGHT = 768;
 
+// Anthropic recommends ≤1280x800 for optimal computer use accuracy
+const RECOMMENDED_MAX_WIDTH = 1280;
+const RECOMMENDED_MAX_HEIGHT = 800;
+
 // Zoom region size - balances detail vs context (matches typical UI element sizes)
 const ZOOM_REGION_WIDTH = 400;
 const ZOOM_REGION_HEIGHT = 300;
@@ -103,6 +107,25 @@ const DEFAULT_MODEL = process.env.CUA_MODEL || "claude-opus-4-5";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Validate that coordinates are within display bounds
+ * Anthropic recommends validating coordinates before executing mouse actions
+ */
+function validateCoordinates(
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): { valid: boolean; error?: string } {
+  if (x < 0 || x >= width || y < 0 || y >= height) {
+    return {
+      valid: false,
+      error: `Coordinates (${x}, ${y}) are outside display bounds (${width}x${height})`,
+    };
+  }
+  return { valid: true };
 }
 
 async function getScreenDimensions(computer: CuaComputerClient): Promise<{ width: number; height: number }> {
@@ -358,6 +381,15 @@ export async function executeTask(
   const displayWidth = screenSize.width;
   const displayHeight = screenSize.height;
 
+  // Warn if resolution exceeds Anthropic recommendations for computer use
+  if (displayWidth > RECOMMENDED_MAX_WIDTH || displayHeight > RECOMMENDED_MAX_HEIGHT) {
+    console.warn(
+      `[Agent] Screen resolution ${displayWidth}x${displayHeight} exceeds ` +
+      `Anthropic's recommended maximum of ${RECOMMENDED_MAX_WIDTH}x${RECOMMENDED_MAX_HEIGHT}. ` +
+      `Coordinate accuracy may be reduced for computer use tasks.`
+    );
+  }
+
   // Get model configuration
   const modelKey = process.env.CUA_MODEL || DEFAULT_MODEL;
   const modelConfig = MODEL_CONFIGS[modelKey] || MODEL_CONFIGS["claude-sonnet-4-5"];
@@ -604,6 +636,13 @@ Be efficient and direct. Verify your actions worked before moving on.`;
               case "mouse_move": {
                 if (input.coordinate) {
                   const [x, y] = input.coordinate;
+                  const validation = validateCoordinates(x, y, displayWidth, displayHeight);
+                  if (!validation.valid) {
+                    toolResultContent = validation.error;
+                    stepRecord.success = false;
+                    stepRecord.error = validation.error;
+                    break;
+                  }
                   const result = await computer.moveCursor(x, y);
                   if (result.success) {
                     toolResultContent = `Cursor moved to (${x}, ${y})`;
@@ -622,6 +661,13 @@ Be efficient and direct. Verify your actions worked before moving on.`;
               case "left_click": {
                 if (input.coordinate) {
                   const [x, y] = input.coordinate;
+                  const validation = validateCoordinates(x, y, displayWidth, displayHeight);
+                  if (!validation.valid) {
+                    toolResultContent = validation.error;
+                    stepRecord.success = false;
+                    stepRecord.error = validation.error;
+                    break;
+                  }
                   const result = await computer.leftClick(x, y);
                   if (result.success) {
                     toolResultContent = `Left click at (${x}, ${y})`;
@@ -640,6 +686,13 @@ Be efficient and direct. Verify your actions worked before moving on.`;
               case "right_click": {
                 if (input.coordinate) {
                   const [x, y] = input.coordinate;
+                  const validation = validateCoordinates(x, y, displayWidth, displayHeight);
+                  if (!validation.valid) {
+                    toolResultContent = validation.error;
+                    stepRecord.success = false;
+                    stepRecord.error = validation.error;
+                    break;
+                  }
                   const result = await computer.rightClick(x, y);
                   if (result.success) {
                     toolResultContent = `Right click at (${x}, ${y})`;
@@ -658,6 +711,13 @@ Be efficient and direct. Verify your actions worked before moving on.`;
               case "double_click": {
                 if (input.coordinate) {
                   const [x, y] = input.coordinate;
+                  const validation = validateCoordinates(x, y, displayWidth, displayHeight);
+                  if (!validation.valid) {
+                    toolResultContent = validation.error;
+                    stepRecord.success = false;
+                    stepRecord.error = validation.error;
+                    break;
+                  }
                   const result = await computer.doubleClick(x, y);
                   if (result.success) {
                     toolResultContent = `Double click at (${x}, ${y})`;
@@ -676,6 +736,13 @@ Be efficient and direct. Verify your actions worked before moving on.`;
               case "triple_click": {
                 if (input.coordinate) {
                   const [x, y] = input.coordinate;
+                  const validation = validateCoordinates(x, y, displayWidth, displayHeight);
+                  if (!validation.valid) {
+                    toolResultContent = validation.error;
+                    stepRecord.success = false;
+                    stepRecord.error = validation.error;
+                    break;
+                  }
                   const result = await computer.tripleClick(x, y);
                   if (result.success) {
                     toolResultContent = `Triple click at (${x}, ${y})`;
@@ -694,6 +761,13 @@ Be efficient and direct. Verify your actions worked before moving on.`;
               case "middle_click": {
                 if (input.coordinate) {
                   const [x, y] = input.coordinate;
+                  const validation = validateCoordinates(x, y, displayWidth, displayHeight);
+                  if (!validation.valid) {
+                    toolResultContent = validation.error;
+                    stepRecord.success = false;
+                    stepRecord.error = validation.error;
+                    break;
+                  }
                   const result = await computer.middleClick(x, y);
                   if (result.success) {
                     toolResultContent = `Middle click at (${x}, ${y})`;
@@ -715,6 +789,21 @@ Be efficient and direct. Verify your actions worked before moving on.`;
                 const endCoord = input.coordinate;
 
                 if (startCoord && endCoord) {
+                  // Validate both start and end coordinates
+                  const startValidation = validateCoordinates(startCoord[0], startCoord[1], displayWidth, displayHeight);
+                  if (!startValidation.valid) {
+                    toolResultContent = `Start ${startValidation.error}`;
+                    stepRecord.success = false;
+                    stepRecord.error = startValidation.error;
+                    break;
+                  }
+                  const endValidation = validateCoordinates(endCoord[0], endCoord[1], displayWidth, displayHeight);
+                  if (!endValidation.valid) {
+                    toolResultContent = `End ${endValidation.error}`;
+                    stepRecord.success = false;
+                    stepRecord.error = endValidation.error;
+                    break;
+                  }
                   const result = await computer.drag(startCoord[0], startCoord[1], endCoord[0], endCoord[1]);
                   if (result.success) {
                     toolResultContent = `Dragged from (${startCoord[0]}, ${startCoord[1]}) to (${endCoord[0]}, ${endCoord[1]})`;
@@ -815,7 +904,15 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
                 // Move to scroll position first (if coordinate provided)
                 if (input.coordinate) {
-                  const moveResult = await computer.moveCursor(input.coordinate[0], input.coordinate[1]);
+                  const [x, y] = input.coordinate;
+                  const validation = validateCoordinates(x, y, displayWidth, displayHeight);
+                  if (!validation.valid) {
+                    toolResultContent = validation.error;
+                    stepRecord.success = false;
+                    stepRecord.error = validation.error;
+                    break;
+                  }
+                  const moveResult = await computer.moveCursor(x, y);
                   if (!moveResult.success) {
                     toolResultContent = `Move cursor for scroll failed: ${moveResult.error || "Unknown error"}`;
                     stepRecord.success = false;
@@ -878,6 +975,13 @@ Be efficient and direct. Verify your actions worked before moving on.`;
                 // Takes a cropped screenshot centered on the coordinate
                 if (input.coordinate) {
                   const [centerX, centerY] = input.coordinate;
+                  const validation = validateCoordinates(centerX, centerY, displayWidth, displayHeight);
+                  if (!validation.valid) {
+                    toolResultContent = validation.error;
+                    stepRecord.success = false;
+                    stepRecord.error = validation.error;
+                    break;
+                  }
 
                   // Calculate region bounds, clamped to screen dimensions
                   const x = Math.max(0, Math.floor(centerX - ZOOM_REGION_WIDTH / 2));
