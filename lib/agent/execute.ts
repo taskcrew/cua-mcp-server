@@ -34,6 +34,15 @@ import {
 import { sleep, generateTaskId, getSandboxHost } from "./utils.js";
 import { ACTION_HANDLERS, OBSERVATION_ACTIONS } from "./actions/index.js";
 
+// Actions that should not trigger auto-release of held keys
+const NO_AUTO_RELEASE_ACTIONS = new Set([
+  "screenshot",
+  "zoom",
+  "hold_key",
+  "release_key",
+  "wait",
+]);
+
 // ============================================
 // Screen Dimensions Helper
 // ============================================
@@ -117,6 +126,15 @@ IMPORTANT RULES:
 3. If a dialog disappears after clicking, the action succeeded
 4. Be precise with coordinates - click the center of buttons
 5. Do NOT scroll unless necessary - most UI elements are already visible
+
+ENHANCED ACTIONS AVAILABLE:
+- hold_key: Press and hold a modifier key (e.g., shift, ctrl, alt). Keys are automatically released after the next action.
+- left_mouse_down: Press and hold left mouse button at coordinates
+- left_mouse_up: Release left mouse button at coordinates
+- middle_click: Click middle mouse button (opens links in new tabs)
+
+When using hold_key for modifier+click combinations:
+Example sequence: hold_key("shift") -> left_click (shift auto-releases after click)
 
 VISUAL VERIFICATION (Critical):
 After every significant action, take a screenshot and carefully evaluate:
@@ -291,6 +309,10 @@ export async function executeTask(
   // Safety limit: total iterations including screenshots (prevents infinite loops)
   const maxTotalIterations = maxSteps * 3;
   let totalIterations = 0;
+
+  // Track held modifier keys for auto-release after actions
+  // This works around Anthropic's computer use tool schema not having release_key
+  const heldKeys = new Set<string>();
 
   while (meaningfulSteps < maxSteps && totalIterations < maxTotalIterations) {
     totalIterations++;
@@ -471,6 +493,39 @@ export async function executeTask(
             if (lastReasoning) stepRecord.reasoning = lastReasoning;
 
             steps.push(stepRecord);
+
+            // Track held keys for auto-release
+            if (input.action === "hold_key" && result.success) {
+              const keyToHold = input.key || input.text;
+              if (keyToHold) {
+                heldKeys.add(keyToHold.toLowerCase());
+                console.log(`[Agent] Key held: ${keyToHold} (${heldKeys.size} keys held)`);
+              }
+            }
+
+            // Handle explicit release_key (if Claude ever sends it)
+            if (input.action === "release_key" && result.success) {
+              const keyToRelease = input.key || input.text;
+              if (keyToRelease) {
+                heldKeys.delete(keyToRelease.toLowerCase());
+                console.log(`[Agent] Key explicitly released: ${keyToRelease}`);
+              }
+            }
+
+            // Auto-release held keys after meaningful actions
+            // This simulates the expected modifier key behavior: hold_key → action → release
+            if (!NO_AUTO_RELEASE_ACTIONS.has(input.action) && heldKeys.size > 0) {
+              console.log(`[Agent] Auto-releasing ${heldKeys.size} held keys after ${input.action}`);
+              for (const key of heldKeys) {
+                try {
+                  await computer.keyUp(key);
+                  console.log(`[Agent] Auto-released key: ${key}`);
+                } catch (err) {
+                  console.warn(`[Agent] Failed to auto-release key ${key}:`, err);
+                }
+              }
+              heldKeys.clear();
+            }
 
             // Update progress for meaningful actions (not screenshots/zoom)
             if (!OBSERVATION_ACTIONS.has(input.action)) {

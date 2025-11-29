@@ -162,13 +162,12 @@ Set `CUA_MODEL=claude-sonnet-4-5` for Sonnet 4.5 (faster, lower cost).
 - `mouse_move` - Move cursor
 
 **Enhanced Actions:**
-- `middle_click` - Middle mouse button click
+- `middle_click` - Middle mouse button click (uses mouse_down/mouse_up with button: "middle")
 - `left_click_drag` - Click and drag from start to end coordinates
 - `left_mouse_down` - Press and hold left button
 - `left_mouse_up` - Release left button
 - `scroll` - Scroll in direction (up/down/left/right)
-- `hold_key` - Hold a modifier key down
-- `release_key` - Release a held key
+- `hold_key` - Hold a modifier key down (auto-releases after next action)
 - `wait` - Pause execution
 
 **Opus 4.5 Only:**
@@ -199,3 +198,17 @@ This design allows the agent to verify its actions without wasting the step budg
 - Total iterations may be ~30-45, but only 15 count toward the limit
 
 **Safety limit:** Total iterations are capped at `3 × max_steps` to prevent infinite loops if the agent only takes observation actions.
+
+## Modifier Key Handling
+
+The `hold_key` action enables modifier+click combinations (e.g., Shift+click for extended context menus).
+
+**Auto-release behavior:** Held keys are automatically released after the next meaningful action. This works around Anthropic's computer use tool schema not exposing a separate `release_key` action.
+
+Example sequence:
+1. `hold_key("shift")` - Shift key is held
+2. `right_click(x, y)` - Right-click with Shift held
+3. Shift is auto-released after the click
+
+Actions that trigger auto-release: clicks, typing, key presses, scrolling, dragging.
+Actions that don't trigger release: screenshot, zoom, wait, hold_key itself.
