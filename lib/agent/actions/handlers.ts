@@ -465,26 +465,6 @@ export async function handleHoldKey(
   };
 }
 
-/**
- * Release a held key
- */
-export async function handleReleaseKey(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  const keyToRelease = input.key || input.text;
-  if (!keyToRelease) {
-    return {
-      content: "release_key requires key",
-      success: false,
-      error: "release_key requires key",
-    };
-  }
-  await computer.keyUp(keyToRelease);
-  return { content: `Key released: ${keyToRelease}`, success: true };
-}
-
 // ==========================================
 // Scroll Actions
 // ==========================================

@@ -39,7 +39,6 @@ const NO_AUTO_RELEASE_ACTIONS = new Set([
   "screenshot",
   "zoom",
   "hold_key",
-  "release_key",
   "wait",
 ]);
 
@@ -500,15 +499,6 @@ export async function executeTask(
               if (keyToHold) {
                 heldKeys.add(keyToHold.toLowerCase());
                 console.log(`[Agent] Key held: ${keyToHold} (${heldKeys.size} keys held)`);
-              }
-            }
-
-            // Handle explicit release_key (if Claude ever sends it)
-            if (input.action === "release_key" && result.success) {
-              const keyToRelease = input.key || input.text;
-              if (keyToRelease) {
-                heldKeys.delete(keyToRelease.toLowerCase());
-                console.log(`[Agent] Key explicitly released: ${keyToRelease}`);
               }
             }
 

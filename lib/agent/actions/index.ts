@@ -24,7 +24,6 @@ import {
   handleType,
   handleKey,
   handleHoldKey,
-  handleReleaseKey,
   // Scroll Actions
   handleScroll,
   // Wait
@@ -57,7 +56,6 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
   type: handleType,
   key: handleKey,
   hold_key: handleHoldKey,
-  release_key: handleReleaseKey,
 
   // Scroll Actions
   scroll: handleScroll,
