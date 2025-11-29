@@ -155,23 +155,35 @@ export function generateTaskId(): string {
 }
 
 /**
- * Update progress in Vercel Blob storage (fire-and-forget)
+ * Update progress in Vercel Blob storage with retry logic
  */
 async function updateProgress(
   taskId: string,
-  progress: TaskProgress
+  progress: TaskProgress,
+  retries: number = 2
 ): Promise<string | undefined> {
-  try {
-    const blob = await put(
-      `progress/${taskId}.json`,
-      JSON.stringify(progress),
-      { access: "public", addRandomSuffix: false }
-    );
-    return blob.url;
-  } catch (err) {
-    console.error("[Agent] Failed to update progress:", err);
-    return undefined;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const blob = await put(
+        `progress/${taskId}.json`,
+        JSON.stringify(progress),
+        { access: "public", addRandomSuffix: false }
+      );
+      if (attempt > 0) {
+        console.log(`[Agent] Progress update succeeded on retry ${attempt}`);
+      }
+      return blob.url;
+    } catch (err) {
+      const isLastAttempt = attempt === retries;
+      if (isLastAttempt) {
+        console.error(`[Agent] Failed to update progress after ${retries + 1} attempts:`, err);
+        return undefined;
+      }
+      // Wait before retry (exponential backoff: 100ms, 200ms)
+      await sleep(100 * (attempt + 1));
+    }
   }
+  return undefined;
 }
 
 /**
@@ -437,14 +449,36 @@ Be efficient and direct. Verify your actions worked before moving on.`;
           };
 
       // Call Claude with computer use tool
-      const response = await anthropic.beta.messages.create({
-        model: modelConfig.model,
-        max_tokens: 4096,
-        system: systemPrompt,
-        tools: [computerTool],
-        messages,
-        betas: [modelConfig.betaFlag],
-      });
+      // Use a heartbeat to update progress while waiting for API response
+      let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
+      const startHeartbeat = () => {
+        heartbeatInterval = setInterval(async () => {
+          progress.updated_at = Date.now();
+          progress.elapsed_ms = Date.now() - startTime;
+          await updateProgress(taskId, progress);
+        }, 5000); // Update every 5 seconds while waiting
+      };
+      const stopHeartbeat = () => {
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+          heartbeatInterval = undefined;
+        }
+      };
+
+      startHeartbeat();
+      let response: Anthropic.Beta.BetaMessage;
+      try {
+        response = await anthropic.beta.messages.create({
+          model: modelConfig.model,
+          max_tokens: 4096,
+          system: systemPrompt,
+          tools: [computerTool],
+          messages,
+          betas: [modelConfig.betaFlag],
+        });
+      } finally {
+        stopHeartbeat();
+      }
 
       // Process response
       const toolResults: Anthropic.Beta.BetaToolResultBlockParam[] = [];
@@ -1093,10 +1127,8 @@ Be efficient and direct. Verify your actions worked before moving on.`;
                 progress.steps_summary.shift();
               }
 
-              // Fire-and-forget progress update (don't block agent loop)
-              updateProgress(taskId, progress).catch((err) => {
-                console.error(`[Agent] Progress update failed for step ${steps.length}:`, err);
-              });
+              // Update progress (await to ensure it completes before next action)
+              await updateProgress(taskId, progress);
             }
 
             toolResults.push({

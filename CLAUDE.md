@@ -97,7 +97,7 @@ Response (running):
   "status": "running",
   "progress": {
     "current_step": 5,
-    "max_steps": 30,
+    "max_steps": 100,
     "elapsed_ms": 45000,
     "last_action": "left_click",
     "last_reasoning": "I see a Submit button...",
@@ -181,6 +181,6 @@ Set `CUA_MODEL=claude-sonnet-4-5` for Sonnet 4.5 (faster, lower cost).
 ## Constraints
 
 - Function timeout: 300 seconds (Vercel Pro)
-- Max steps per task: 50
+- Max steps per task: 100 (default: 100)
 - Task history TTL: 24 hours
 - Display resolution: Dynamic (fetched from sandbox, default 1024x768)

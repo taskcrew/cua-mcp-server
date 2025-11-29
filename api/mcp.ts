@@ -42,7 +42,7 @@ interface Tool {
   };
 }
 
-// Tool definitions - 8 total (5 sandbox management + 3 agentic)
+// Tool definitions - 9 total (5 sandbox management + 4 agentic)
 const TOOLS: Tool[] = [
   // ==========================================
   // Sandbox Management Tools (5)
@@ -160,7 +160,7 @@ const TOOLS: Tool[] = [
         },
         max_steps: {
           type: "number",
-          description: "Maximum actions before giving up (default: 30)",
+          description: "Maximum actions before giving up (default: 100)",
         },
         timeout_seconds: {
           type: "number",
@@ -209,6 +209,16 @@ const TOOLS: Tool[] = [
     },
   },
 ];
+
+// Validate sandbox name to prevent injection attacks
+function isValidSandboxName(name: unknown): name is string {
+  return (
+    typeof name === "string" &&
+    name.length > 0 &&
+    name.length <= 64 &&
+    /^[a-zA-Z0-9_-]+$/.test(name)
+  );
+}
 
 // Get API keys from environment or request headers
 function getApiKey(req: VercelRequest): string {
@@ -265,23 +275,42 @@ async function executeTool(
     case "list_sandboxes":
       return await sandboxClient.listSandboxes();
 
-    case "get_sandbox":
-      return await sandboxClient.getSandbox(args.name as string);
+    case "get_sandbox": {
+      if (!isValidSandboxName(args.name)) {
+        return { success: false, error: "Invalid sandbox name" };
+      }
+      return await sandboxClient.getSandbox(args.name);
+    }
 
-    case "start_sandbox":
-      return await sandboxClient.startSandbox(args.name as string);
+    case "start_sandbox": {
+      if (!isValidSandboxName(args.name)) {
+        return { success: false, error: "Invalid sandbox name" };
+      }
+      return await sandboxClient.startSandbox(args.name);
+    }
 
-    case "stop_sandbox":
-      return await sandboxClient.stopSandbox(args.name as string);
+    case "stop_sandbox": {
+      if (!isValidSandboxName(args.name)) {
+        return { success: false, error: "Invalid sandbox name" };
+      }
+      return await sandboxClient.stopSandbox(args.name);
+    }
 
-    case "restart_sandbox":
-      return await sandboxClient.restartSandbox(args.name as string);
+    case "restart_sandbox": {
+      if (!isValidSandboxName(args.name)) {
+        return { success: false, error: "Invalid sandbox name" };
+      }
+      return await sandboxClient.restartSandbox(args.name);
+    }
 
     // ==========================================
     // Agentic Tools
     // ==========================================
     case "describe_screen": {
-      const sandboxName = args.sandbox_name as string;
+      if (!isValidSandboxName(args.sandbox_name)) {
+        return { success: false, error: "Invalid sandbox name" };
+      }
+      const sandboxName = args.sandbox_name;
       const focus = (args.focus as "ui" | "text" | "full") || "ui";
       const question = args.question as string | undefined;
 
@@ -314,9 +343,15 @@ async function executeTool(
     }
 
     case "run_task": {
-      const sandboxName = args.sandbox_name as string;
+      if (!isValidSandboxName(args.sandbox_name)) {
+        return { success: false, error: "Invalid sandbox name", summary: "Failed to start task" };
+      }
+      const sandboxName = args.sandbox_name;
       const task = args.task as string;
-      const maxSteps = Math.min((args.max_steps as number) || 30, 50);
+      if (typeof task !== "string" || !task.trim()) {
+        return { success: false, error: "Task description is required", summary: "Failed to start task" };
+      }
+      const maxSteps = Math.min((args.max_steps as number) || 100, 100);
       const timeoutSeconds = Math.min(
         (args.timeout_seconds as number) || 280,
         280
@@ -377,81 +412,83 @@ async function executeTool(
 
     case "get_task_history": {
       const taskId = args.task_id as string;
+      if (typeof taskId !== "string" || !taskId.trim()) {
+        return { success: false, error: "task_id is required" };
+      }
       const historyUrl = args.history_url as string | undefined;
 
-      try {
-        // If URL provided, fetch directly
-        if (historyUrl) {
+      // If URL provided, fetch directly
+      if (historyUrl) {
+        try {
           const response = await fetch(historyUrl);
           if (!response.ok) {
             return { success: false, error: "Task not found at provided URL" };
           }
           return await response.json() as TaskResult;
+        } catch {
+          return { success: false, error: "Failed to fetch from provided URL" };
         }
+      }
 
-        // Try to find blob by checking head
+      // Try to find blob by checking head (throws if not found)
+      try {
         const blobInfo = await head(`tasks/${taskId}.json`);
-        if (!blobInfo) {
-          return { success: false, error: "Task not found" };
-        }
-
         const response = await fetch(blobInfo.url);
         return await response.json() as TaskResult;
-      } catch (blobError) {
-        return {
-          success: false,
-          error: `Failed to retrieve task: ${blobError instanceof Error ? blobError.message : "Unknown error"}`,
-        };
+      } catch {
+        return { success: false, error: "Task not found" };
       }
     }
 
     case "get_task_progress": {
       const taskId = args.task_id as string;
+      if (typeof taskId !== "string" || !taskId.trim()) {
+        return { task_id: "", status: "error", error: "task_id is required" };
+      }
       const progressUrl = args.progress_url as string | undefined;
 
-      try {
-        // Try progress URL first (faster)
-        if (progressUrl) {
+      // Try progress URL first (faster)
+      if (progressUrl) {
+        try {
           const response = await fetch(progressUrl);
           if (response.ok) {
             const progress = (await response.json()) as TaskProgress;
             return formatProgressResponse(progress);
           }
+        } catch {
+          // Fall through to blob lookup
         }
+      }
 
-        // Fall back to blob head lookup
+      // Try to get progress from blob (throws if not found)
+      try {
         const blobInfo = await head(`progress/${taskId}.json`);
-        if (blobInfo) {
-          const response = await fetch(blobInfo.url);
-          const progress = (await response.json()) as TaskProgress;
-          return formatProgressResponse(progress);
-        }
+        const response = await fetch(blobInfo.url);
+        const progress = (await response.json()) as TaskProgress;
+        return formatProgressResponse(progress);
+      } catch {
+        // Progress blob not found, check if task completed
+      }
 
-        // Check if task completed (progress might be stale but task finished)
+      // Check if task completed (progress might be stale but task finished)
+      try {
         const resultInfo = await head(`tasks/${taskId}.json`);
-        if (resultInfo) {
-          const response = await fetch(resultInfo.url);
-          const result = (await response.json()) as TaskResult;
-          return {
-            task_id: taskId,
-            status: result.success ? "completed" : "failed",
-            result: {
-              success: result.success,
-              summary: result.summary,
-              total_steps: result.steps_taken,
-              duration_ms: result.duration_ms,
-              error: result.error,
-            },
-          };
-        }
-
-        return { task_id: taskId, status: "not_found" };
-      } catch (err) {
+        const response = await fetch(resultInfo.url);
+        const result = (await response.json()) as TaskResult;
         return {
           task_id: taskId,
-          status: "error",
-          error: err instanceof Error ? err.message : "Unknown error",
+          status: result.success ? "completed" : "failed",
+          result: {
+            success: result.success,
+            summary: result.summary,
+            total_steps: result.steps_taken,
+            duration_ms: result.duration_ms,
+            error: result.error,
+          },
         };
+      } catch {
+        // Neither progress nor result found
+        return { task_id: taskId, status: "not_found" };
       }
     }
 
