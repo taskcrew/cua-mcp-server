@@ -271,9 +271,19 @@ export class CuaComputerClient {
 
   /**
    * Middle click at coordinates (moves cursor first, then clicks)
+   * Uses mouse_down/mouse_up with button: "middle" per CUA Cloud API
    */
   async middleClick(x: number, y: number): Promise<CommandResult> {
-    return this.clickAt(x, y, "middle_click");
+    const moveResult = await this.sendCommand("move_cursor", { x, y });
+    if (!moveResult.success) {
+      return { success: false, error: `Move cursor failed: ${moveResult.error}` };
+    }
+    // Use mouse_down + mouse_up with button: "middle" for middle click
+    const downResult = await this.sendCommand("mouse_down", { button: "middle" });
+    if (!downResult.success) {
+      return { success: false, error: `Mouse down failed: ${downResult.error}` };
+    }
+    return this.sendCommand("mouse_up", { button: "middle" });
   }
 
   /**
