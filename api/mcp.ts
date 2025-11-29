@@ -448,9 +448,11 @@ async function executeTool(
       const progressUrl = args.progress_url as string | undefined;
 
       // Try progress URL first (faster)
+      // Add cache-busting to ensure fresh data from CDN
       if (progressUrl) {
         try {
-          const response = await fetch(progressUrl);
+          const cacheBuster = `?t=${Date.now()}`;
+          const response = await fetch(progressUrl + cacheBuster, { cache: 'no-store' });
           if (response.ok) {
             const progress = (await response.json()) as TaskProgress;
             return formatProgressResponse(progress);
@@ -463,7 +465,8 @@ async function executeTool(
       // Try to get progress from blob (throws if not found)
       try {
         const blobInfo = await head(`progress/${taskId}.json`);
-        const response = await fetch(blobInfo.url);
+        const cacheBuster = `?t=${Date.now()}`;
+        const response = await fetch(blobInfo.url + cacheBuster, { cache: 'no-store' });
         const progress = (await response.json()) as TaskProgress;
         return formatProgressResponse(progress);
       } catch {

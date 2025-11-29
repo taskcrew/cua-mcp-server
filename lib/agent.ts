@@ -431,7 +431,14 @@ Be efficient and direct. Verify your actions worked before moving on.`;
     },
   ];
 
-  for (let stepNum = 0; stepNum < maxSteps; stepNum++) {
+  // Track meaningful actions (excludes screenshot/zoom which are just observations)
+  let meaningfulSteps = 0;
+  // Safety limit: total iterations including screenshots (prevents infinite loops)
+  const maxTotalIterations = maxSteps * 3;
+  let totalIterations = 0;
+
+  while (meaningfulSteps < maxSteps && totalIterations < maxTotalIterations) {
+    totalIterations++;
     // Check timeout
     const elapsed = Date.now() - startTime;
     if (elapsed > timeoutSeconds * 1000) {
@@ -529,22 +536,24 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
             // Update final progress
             progress.status = "completed";
+            progress.current_step = meaningfulSteps;
             progress.updated_at = Date.now();
             progress.elapsed_ms = durationMs;
             progress.final_result = {
               success: true,
               summary,
-              total_steps: steps.length,
+              total_steps: meaningfulSteps,
               duration_ms: durationMs,
             };
-            await updateProgress(taskId, progress);
+            const updateResult = await updateProgress(taskId, progress);
+            console.log(`[Agent] Final progress update (completed): ${updateResult ? 'success' : 'FAILED'}`);
 
             return {
               task_id: taskId,
               success: true,
               summary,
               steps,
-              steps_taken: steps.length,
+              steps_taken: meaningfulSteps,
               duration_ms: durationMs,
               screen_size: { width: displayWidth, height: displayHeight },
               progress_url: progressUrl,
@@ -556,23 +565,25 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
             // Update final progress
             progress.status = "failed";
+            progress.current_step = meaningfulSteps;
             progress.updated_at = Date.now();
             progress.elapsed_ms = durationMs;
             progress.final_result = {
               success: false,
               summary: reason,
-              total_steps: steps.length,
+              total_steps: meaningfulSteps,
               duration_ms: durationMs,
               error: "Task failed",
             };
-            await updateProgress(taskId, progress);
+            const updateResult = await updateProgress(taskId, progress);
+            console.log(`[Agent] Final progress update (failed): ${updateResult ? 'success' : 'FAILED'}`);
 
             return {
               task_id: taskId,
               success: false,
               summary: reason,
               steps,
-              steps_taken: steps.length,
+              steps_taken: meaningfulSteps,
               duration_ms: durationMs,
               error: "Task failed",
               progress_url: progressUrl,
@@ -597,7 +608,7 @@ Be efficient and direct. Verify your actions worked before moving on.`;
           };
 
           const stepRecord: AgentStep = {
-            step: stepNum + 1,
+            step: steps.length + 1,
             action: input.action,
             coordinates: input.coordinate,
             success: true,
@@ -1211,8 +1222,9 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
             // Update progress for meaningful actions (not screenshots/zoom)
             if (input.action !== "screenshot" && input.action !== "zoom") {
+              meaningfulSteps++;
               const now = Date.now();
-              progress.current_step = steps.length;
+              progress.current_step = meaningfulSteps;
               progress.updated_at = now;
               progress.elapsed_ms = now - startTime;
               progress.last_action = {
@@ -1251,7 +1263,7 @@ Be efficient and direct. Verify your actions worked before moving on.`;
             steps.push(stepRecord);
 
             // Log error for debugging
-            console.error(`[Agent] Step ${stepNum + 1} failed (${input.action}):`, stepRecord.error);
+            console.error(`[Agent] Action failed (${input.action}):`, stepRecord.error);
 
             toolResults.push({
               type: "tool_result",
@@ -1285,22 +1297,24 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
         // Update final progress
         progress.status = "completed";
+        progress.current_step = meaningfulSteps;
         progress.updated_at = Date.now();
         progress.elapsed_ms = durationMs;
         progress.final_result = {
           success: true,
           summary: summaryText,
-          total_steps: steps.length,
+          total_steps: meaningfulSteps,
           duration_ms: durationMs,
         };
-        await updateProgress(taskId, progress);
+        const updateResult = await updateProgress(taskId, progress);
+        console.log(`[Agent] Final progress update (end_turn): ${updateResult ? 'success' : 'FAILED'}`);
 
         return {
           task_id: taskId,
           success: true,
           summary: summaryText,
           steps,
-          steps_taken: steps.length,
+          steps_taken: meaningfulSteps,
           duration_ms: durationMs,
           screen_size: { width: displayWidth, height: displayHeight },
           progress_url: progressUrl,
@@ -1312,23 +1326,25 @@ Be efficient and direct. Verify your actions worked before moving on.`;
 
       // Update final progress
       progress.status = "failed";
+      progress.current_step = meaningfulSteps;
       progress.updated_at = Date.now();
       progress.elapsed_ms = durationMs;
       progress.final_result = {
         success: false,
         summary: `Agent error: ${errorMsg}`,
-        total_steps: steps.length,
+        total_steps: meaningfulSteps,
         duration_ms: durationMs,
         error: errorMsg,
       };
-      await updateProgress(taskId, progress);
+      const updateResult = await updateProgress(taskId, progress);
+      console.log(`[Agent] Final progress update (error): ${updateResult ? 'success' : 'FAILED'}`);
 
       return {
         task_id: taskId,
         success: false,
         summary: `Agent error: ${errorMsg}`,
         steps,
-        steps_taken: steps.length,
+        steps_taken: meaningfulSteps,
         duration_ms: durationMs,
         screen_size: { width: displayWidth, height: displayHeight },
         error: errorMsg,
@@ -1338,29 +1354,34 @@ Be efficient and direct. Verify your actions worked before moving on.`;
   }
 
   const durationMs = Date.now() - startTime;
+  const errorMsg = meaningfulSteps >= maxSteps
+    ? `Reached ${maxSteps} action limit (${meaningfulSteps} actions taken)`
+    : `Safety limit reached (${totalIterations} total iterations)`;
 
   // Update final progress
   progress.status = "failed";
+  progress.current_step = meaningfulSteps;
   progress.updated_at = Date.now();
   progress.elapsed_ms = durationMs;
   progress.final_result = {
     success: false,
     summary: "Max steps exceeded without completing task",
-    total_steps: steps.length,
+    total_steps: meaningfulSteps,
     duration_ms: durationMs,
-    error: `Reached ${maxSteps} step limit`,
+    error: errorMsg,
   };
-  await updateProgress(taskId, progress);
+  const updateResult = await updateProgress(taskId, progress);
+  console.log(`[Agent] Final progress update (max steps): ${updateResult ? 'success' : 'FAILED'}`);
 
   return {
     task_id: taskId,
     success: false,
     summary: "Max steps exceeded without completing task",
     steps,
-    steps_taken: steps.length,
+    steps_taken: meaningfulSteps,
     duration_ms: durationMs,
     screen_size: { width: displayWidth, height: displayHeight },
-    error: `Reached ${maxSteps} step limit`,
+    error: errorMsg,
     progress_url: progressUrl,
   };
 }
