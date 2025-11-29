@@ -184,3 +184,18 @@ Set `CUA_MODEL=claude-sonnet-4-5` for Sonnet 4.5 (faster, lower cost).
 - Max steps per task: 100 (default: 100)
 - Task history TTL: 24 hours
 - Display resolution: Dynamic (fetched from sandbox, default 1024x768)
+
+## Agent Step Counting Design
+
+The `max_steps` parameter counts only **meaningful actions** (clicks, types, keys, scrolls, etc.).
+
+**Observation actions don't count toward the limit:**
+- `screenshot` - Visual verification after actions
+- `zoom` - Viewing specific screen regions
+
+This design allows the agent to verify its actions without wasting the step budget. For example, with `max_steps=15`:
+- Agent can perform 15 clicks/types/etc.
+- Each action can be followed by a verification screenshot
+- Total iterations may be ~30-45, but only 15 count toward the limit
+
+**Safety limit:** Total iterations are capped at `3 × max_steps` to prevent infinite loops if the agent only takes observation actions.
