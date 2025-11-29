@@ -139,17 +139,12 @@ const ACTION_LABELS: Record<string, string> = {
   left_click: "Click",
   right_click: "Right-click",
   double_click: "Double-click",
-  triple_click: "Triple-click",
   middle_click: "Middle-click",
   type: "Type text",
   key: "Key press",
   scroll: "Scroll",
-  run_command: "Run command",
   mouse_move: "Move cursor",
   left_click_drag: "Drag",
-  read_file: "Read file",
-  write_file: "Write file",
-  list_directory: "List directory",
 };
 
 /**

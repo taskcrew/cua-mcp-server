@@ -28,6 +28,22 @@ export const ZOOM_REGION_WIDTH = 400;
 export const ZOOM_REGION_HEIGHT = 300;
 
 // ============================================
+// Task Limits (enforced server-side)
+// ============================================
+
+/** Default max steps if not specified by client */
+export const DEFAULT_MAX_STEPS = 100;
+
+/** Hard maximum steps - client cannot exceed this */
+export const MAX_STEPS_LIMIT = 100;
+
+/** Default timeout in seconds if not specified */
+export const DEFAULT_TIMEOUT_SECONDS = 750;
+
+/** Hard maximum timeout - must be below Vercel's maxDuration (800s) */
+export const MAX_TIMEOUT_SECONDS = 750;
+
+// ============================================
 // Timing Constants
 // ============================================
 

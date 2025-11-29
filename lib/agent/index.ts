@@ -34,6 +34,11 @@ export type {
 // ============================================
 
 export {
+  // Task limits (enforced server-side)
+  DEFAULT_MAX_STEPS,
+  MAX_STEPS_LIMIT,
+  DEFAULT_TIMEOUT_SECONDS,
+  MAX_TIMEOUT_SECONDS,
   // Display defaults
   DEFAULT_DISPLAY_WIDTH,
   DEFAULT_DISPLAY_HEIGHT,

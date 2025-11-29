@@ -9,6 +9,10 @@ import {
   getSandboxHost,
   generateTaskId,
   initializeProgress,
+  DEFAULT_MAX_STEPS,
+  MAX_STEPS_LIMIT,
+  DEFAULT_TIMEOUT_SECONDS,
+  MAX_TIMEOUT_SECONDS,
   type TaskResult,
   type TaskProgress,
 } from "../lib/agent/index.js";
@@ -195,10 +199,13 @@ async function executeTool(
       if (typeof task !== "string" || !task.trim()) {
         return { success: false, error: "Task description is required", summary: "Failed to start task" };
       }
-      const maxSteps = Math.min((args.max_steps as number) || 100, 100);
+      const maxSteps = Math.min(
+        (args.max_steps as number) || DEFAULT_MAX_STEPS,
+        MAX_STEPS_LIMIT
+      );
       const timeoutSeconds = Math.min(
-        (args.timeout_seconds as number) || 280,
-        280
+        (args.timeout_seconds as number) || DEFAULT_TIMEOUT_SECONDS,
+        MAX_TIMEOUT_SECONDS
       );
 
       // Get sandbox host
@@ -292,28 +299,12 @@ async function executeTool(
       if (typeof taskId !== "string" || !taskId.trim()) {
         return { task_id: "", status: "error", error: "task_id is required" };
       }
-      const progressUrl = args.progress_url as string | undefined;
 
-      // Try progress URL first (faster) - with SSRF protection
-      // Add cache-busting to ensure fresh data from CDN
-      if (progressUrl && isValidBlobUrl(progressUrl)) {
-        try {
-          const cacheBuster = `?t=${Date.now()}`;
-          const response = await fetch(progressUrl + cacheBuster, { cache: 'no-store' });
-          if (response.ok) {
-            const progress = (await response.json()) as TaskProgress;
-            return formatProgressResponse(progress);
-          }
-        } catch {
-          // Fall through to blob lookup
-        }
-      }
-
-      // Try to get progress from blob (throws if not found)
+      // Always use head() to get fresh URL - bypasses CDN cache
+      // The progress_url parameter is ignored in favor of fresh lookup
       try {
         const blobInfo = await head(`progress/${taskId}.json`);
-        const cacheBuster = `?t=${Date.now()}`;
-        const response = await fetch(blobInfo.url + cacheBuster, { cache: 'no-store' });
+        const response = await fetch(blobInfo.url, { cache: 'no-store' });
         const progress = (await response.json()) as TaskProgress;
         return formatProgressResponse(progress);
       } catch {

@@ -136,7 +136,7 @@ export const TOOLS: Tool[] = [
         },
         timeout_seconds: {
           type: "number",
-          description: "Maximum time in seconds (default: 280, max: 280)",
+          description: "Maximum time in seconds (default: 750, max: 750)",
         },
       },
       required: ["sandbox_name", "task"],

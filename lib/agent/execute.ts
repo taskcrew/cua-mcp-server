@@ -21,6 +21,8 @@ import {
   RECOMMENDED_MAX_HEIGHT,
   UI_SETTLE_DELAY_MS,
   HEARTBEAT_INTERVAL_MS,
+  DEFAULT_MAX_STEPS,
+  DEFAULT_TIMEOUT_SECONDS,
   getModelConfig,
 } from "./config.js";
 import {
@@ -123,15 +125,6 @@ After every significant action, take a screenshot and carefully evaluate:
 - If not, try an alternative approach before giving up.
 Look for visual confirmation: dialogs appearing/disappearing, text changing, selections highlighting.
 
-EXTENDED ACTIONS AVAILABLE:
-Beyond standard computer_use actions, you can also use:
-- run_command: Execute shell commands (use "command" field)
-- read_file/write_file: Read/write files (use "path" and "content" fields)
-- list_directory/file_exists/create_directory/delete_file: File system operations
-- get_clipboard/set_clipboard: Clipboard operations (use "text" field for set)
-- get_accessibility_tree/find_element: UI accessibility queries
-- hold_key/release_key: Hold modifier keys for complex interactions
-
 When the task is complete, you MUST output exactly: TASK_COMPLETE: <brief summary>
 If you cannot complete the task, output exactly: TASK_FAILED: <reason>
 
@@ -217,8 +210,8 @@ export async function executeTaskInBackground(
  * @param cuaApiKey - API key for CUA
  * @param anthropicApiKey - API key for Anthropic
  * @param task - Task description to complete
- * @param maxSteps - Maximum meaningful actions (default: 30)
- * @param timeoutSeconds - Timeout in seconds (default: 280)
+ * @param maxSteps - Maximum meaningful actions (default: 100)
+ * @param timeoutSeconds - Timeout in seconds (default: 280, max: 280)
  * @param existingTaskId - Pre-generated task ID (for non-blocking mode)
  * @param existingProgressUrl - Pre-initialized progress URL
  * @returns Task result with progress URL
@@ -229,8 +222,8 @@ export async function executeTask(
   cuaApiKey: string,
   anthropicApiKey: string,
   task: string,
-  maxSteps: number = 30,
-  timeoutSeconds: number = 280,
+  maxSteps: number = DEFAULT_MAX_STEPS,
+  timeoutSeconds: number = DEFAULT_TIMEOUT_SECONDS,
   existingTaskId?: string,
   existingProgressUrl?: string
 ): Promise<TaskResult & { progress_url?: string }> {

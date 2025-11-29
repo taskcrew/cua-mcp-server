@@ -67,24 +67,36 @@ export async function handleScreenshot(
 
 /**
  * Capture zoomed region screenshot (Opus 4.5 only)
- * Takes a cropped screenshot centered on the coordinate
+ * Takes a cropped screenshot centered on the coordinate.
+ * If no coordinate is provided, defaults to screen center.
  */
 export async function handleZoom(
   input: ActionInput,
   computer: CuaComputerClient,
   context: ActionContext
 ): Promise<ActionResult> {
-  const coords = validateAndExtractCoords(
-    input,
-    context.displayWidth,
-    context.displayHeight
-  );
-  if (!coords.valid) {
-    return { content: coords.error, success: false, error: coords.error };
-  }
+  let centerX: number, centerY: number;
 
-  const centerX = coords.x;
-  const centerY = coords.y;
+  if (input.coordinate && Array.isArray(input.coordinate)) {
+    [centerX, centerY] = input.coordinate;
+    // Validate bounds
+    if (
+      centerX < 0 ||
+      centerX >= context.displayWidth ||
+      centerY < 0 ||
+      centerY >= context.displayHeight
+    ) {
+      return {
+        content: "Coordinates out of bounds",
+        success: false,
+        error: "Coordinates out of bounds",
+      };
+    }
+  } else {
+    // Default to screen center
+    centerX = Math.floor(context.displayWidth / 2);
+    centerY = Math.floor(context.displayHeight / 2);
+  }
   // Calculate region bounds, clamped to screen dimensions
   const x = Math.max(0, Math.floor(centerX - ZOOM_REGION_WIDTH / 2));
   const y = Math.max(0, Math.floor(centerY - ZOOM_REGION_HEIGHT / 2));
@@ -241,33 +253,6 @@ export async function handleDoubleClick(
   }
   return {
     content: `Double click failed: ${result.error || "Unknown error"}`,
-    success: false,
-    error: result.error,
-  };
-}
-
-/**
- * Triple click at specified coordinates (select line/paragraph)
- */
-export async function handleTripleClick(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  const coords = validateAndExtractCoords(
-    input,
-    context.displayWidth,
-    context.displayHeight
-  );
-  if (!coords.valid) {
-    return { content: coords.error, success: false, error: coords.error };
-  }
-  const result = await computer.tripleClick(coords.x, coords.y);
-  if (result.success) {
-    return { content: `Triple click at (${coords.x}, ${coords.y})`, success: true };
-  }
-  return {
-    content: `Triple click failed: ${result.error || "Unknown error"}`,
     success: false,
     error: result.error,
   };
@@ -578,25 +563,6 @@ export async function handleScroll(
 }
 
 // ==========================================
-// Cursor Position
-// ==========================================
-
-/**
- * Get current cursor position
- */
-export async function handleCursorPosition(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  const result = await computer.getCursorPosition();
-  return {
-    content: result.content || "Unknown position",
-    success: true,
-  };
-}
-
-// ==========================================
 // Wait Action
 // ==========================================
 
@@ -612,286 +578,4 @@ export async function handleWait(
   // Cap at maximum wait time
   await sleep(Math.min(waitMs, MAX_WAIT_MS));
   return { content: `Waited ${waitMs}ms`, success: true };
-}
-
-// ==========================================
-// Shell Commands
-// ==========================================
-
-/**
- * Execute a shell command
- */
-export async function handleRunCommand(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  if (!input.command) {
-    return {
-      content: "run_command requires command",
-      success: false,
-      error: "run_command requires command",
-    };
-  }
-  const result = await computer.runCommand(input.command);
-  if (result.success) {
-    return {
-      content: result.content || "Command executed successfully",
-      success: true,
-    };
-  }
-  return {
-    content: `Command failed: ${result.error || "Unknown error"}`,
-    success: false,
-    error: result.error,
-  };
-}
-
-// ==========================================
-// File Operations
-// ==========================================
-
-/**
- * Read file contents
- */
-export async function handleReadFile(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  if (!input.path) {
-    return {
-      content: "read_file requires path",
-      success: false,
-      error: "read_file requires path",
-    };
-  }
-  const result = await computer.readText(input.path);
-  if (result.success) {
-    return { content: result.content || "(empty file)", success: true };
-  }
-  return {
-    content: `Read failed: ${result.error || "File not found"}`,
-    success: false,
-    error: result.error,
-  };
-}
-
-/**
- * Write file contents
- */
-export async function handleWriteFile(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  if (!input.path || input.content === undefined) {
-    return {
-      content: "write_file requires path and content",
-      success: false,
-      error: "write_file requires path and content",
-    };
-  }
-  const result = await computer.writeText(input.path, input.content);
-  if (result.success) {
-    return { content: `File written: ${input.path}`, success: true };
-  }
-  return {
-    content: `Write failed: ${result.error || "Unknown error"}`,
-    success: false,
-    error: result.error,
-  };
-}
-
-/**
- * List directory contents
- */
-export async function handleListDirectory(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  if (!input.path) {
-    return {
-      content: "list_directory requires path",
-      success: false,
-      error: "list_directory requires path",
-    };
-  }
-  const result = await computer.listDir(input.path);
-  if (result.success) {
-    return { content: result.content || "(empty directory)", success: true };
-  }
-  return {
-    content: `List failed: ${result.error || "Directory not found"}`,
-    success: false,
-    error: result.error,
-  };
-}
-
-/**
- * Check if file exists
- */
-export async function handleFileExists(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  if (!input.path) {
-    return {
-      content: "file_exists requires path",
-      success: false,
-      error: "file_exists requires path",
-    };
-  }
-  const result = await computer.fileExists(input.path);
-  return {
-    content: result.content || (result.success ? "true" : "false"),
-    success: true,
-  };
-}
-
-/**
- * Create directory
- */
-export async function handleCreateDirectory(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  if (!input.path) {
-    return {
-      content: "create_directory requires path",
-      success: false,
-      error: "create_directory requires path",
-    };
-  }
-  const result = await computer.createDir(input.path);
-  if (result.success) {
-    return { content: `Directory created: ${input.path}`, success: true };
-  }
-  return {
-    content: `Create failed: ${result.error || "Unknown error"}`,
-    success: false,
-    error: result.error,
-  };
-}
-
-/**
- * Delete file
- */
-export async function handleDeleteFile(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  if (!input.path) {
-    return {
-      content: "delete_file requires path",
-      success: false,
-      error: "delete_file requires path",
-    };
-  }
-  const result = await computer.deleteFile(input.path);
-  if (result.success) {
-    return { content: `File deleted: ${input.path}`, success: true };
-  }
-  return {
-    content: `Delete failed: ${result.error || "Unknown error"}`,
-    success: false,
-    error: result.error,
-  };
-}
-
-// ==========================================
-// Clipboard Operations
-// ==========================================
-
-/**
- * Get clipboard contents
- */
-export async function handleGetClipboard(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  const result = await computer.copyToClipboard();
-  if (result.success) {
-    return { content: result.content || "(clipboard empty)", success: true };
-  }
-  return {
-    content: `Get clipboard failed: ${result.error || "Unknown error"}`,
-    success: false,
-    error: result.error,
-  };
-}
-
-/**
- * Set clipboard contents
- */
-export async function handleSetClipboard(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  if (!input.text) {
-    return {
-      content: "set_clipboard requires text",
-      success: false,
-      error: "set_clipboard requires text",
-    };
-  }
-  const result = await computer.setClipboard(input.text);
-  if (result.success) {
-    return { content: "Clipboard set", success: true };
-  }
-  return {
-    content: `Set clipboard failed: ${result.error || "Unknown error"}`,
-    success: false,
-    error: result.error,
-  };
-}
-
-// ==========================================
-// Accessibility
-// ==========================================
-
-/**
- * Get accessibility tree
- */
-export async function handleGetAccessibilityTree(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  const result = await computer.getAccessibilityTree();
-  if (result.success) {
-    return { content: result.content || "(no accessibility tree)", success: true };
-  }
-  return {
-    content: `Get accessibility tree failed: ${result.error || "Unknown error"}`,
-    success: false,
-    error: result.error,
-  };
-}
-
-/**
- * Find UI element by role and title
- */
-export async function handleFindElement(
-  input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
-): Promise<ActionResult> {
-  const role = input.text; // Use text field for role
-  const title = input.content; // Use content field for title
-  const result = await computer.findElement(role, title);
-  if (result.success) {
-    return { content: result.content || "(element not found)", success: true };
-  }
-  return {
-    content: `Find element failed: ${result.error || "Unknown error"}`,
-    success: false,
-    error: result.error,
-  };
 }

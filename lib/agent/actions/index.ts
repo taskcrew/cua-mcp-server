@@ -16,7 +16,6 @@ import {
   handleLeftClick,
   handleRightClick,
   handleDoubleClick,
-  handleTripleClick,
   handleMiddleClick,
   handleLeftClickDrag,
   handleLeftMouseDown,
@@ -28,25 +27,8 @@ import {
   handleReleaseKey,
   // Scroll Actions
   handleScroll,
-  // Cursor Position
-  handleCursorPosition,
   // Wait
   handleWait,
-  // Shell Commands
-  handleRunCommand,
-  // File Operations
-  handleReadFile,
-  handleWriteFile,
-  handleListDirectory,
-  handleFileExists,
-  handleCreateDirectory,
-  handleDeleteFile,
-  // Clipboard Operations
-  handleGetClipboard,
-  handleSetClipboard,
-  // Accessibility
-  handleGetAccessibilityTree,
-  handleFindElement,
 } from "./handlers.js";
 
 // Re-export types for convenience
@@ -66,7 +48,6 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
   left_click: handleLeftClick,
   right_click: handleRightClick,
   double_click: handleDoubleClick,
-  triple_click: handleTripleClick,
   middle_click: handleMiddleClick,
   left_click_drag: handleLeftClickDrag,
   left_mouse_down: handleLeftMouseDown,
@@ -81,30 +62,8 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
   // Scroll Actions
   scroll: handleScroll,
 
-  // Cursor Position
-  cursor_position: handleCursorPosition,
-
   // Wait
   wait: handleWait,
-
-  // Shell Commands
-  run_command: handleRunCommand,
-
-  // File Operations
-  read_file: handleReadFile,
-  write_file: handleWriteFile,
-  list_directory: handleListDirectory,
-  file_exists: handleFileExists,
-  create_directory: handleCreateDirectory,
-  delete_file: handleDeleteFile,
-
-  // Clipboard Operations
-  get_clipboard: handleGetClipboard,
-  set_clipboard: handleSetClipboard,
-
-  // Accessibility
-  get_accessibility_tree: handleGetAccessibilityTree,
-  find_element: handleFindElement,
 };
 
 /**

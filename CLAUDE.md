@@ -66,7 +66,7 @@ lib/
 │   └── actions/               # Action handler registry
 │       ├── index.ts           # Registry exports and OBSERVATION_ACTIONS set
 │       ├── types.ts           # ActionHandler type, ActionContext
-│       └── handlers.ts        # 29 action handlers (click, type, scroll, etc.)
+│       └── handlers.ts        # 16 action handlers (click, type, scroll, etc.)
 ├── cua-client.ts              # CUA Cloud API clients (sandbox + computer control)
 └── tool-schemas.ts            # MCP tool definitions (extracted from mcp.ts)
 ```
@@ -162,7 +162,6 @@ Set `CUA_MODEL=claude-sonnet-4-5` for Sonnet 4.5 (faster, lower cost).
 - `mouse_move` - Move cursor
 
 **Enhanced Actions:**
-- `triple_click` - Triple click (select line/paragraph)
 - `middle_click` - Middle mouse button click
 - `left_click_drag` - Click and drag from start to end coordinates
 - `left_mouse_down` - Press and hold left button
@@ -173,31 +172,16 @@ Set `CUA_MODEL=claude-sonnet-4-5` for Sonnet 4.5 (faster, lower cost).
 - `wait` - Pause execution
 
 **Opus 4.5 Only:**
-- `zoom` - View specific screen regions at full resolution (400x300 crop around coordinate)
-
-**Shell Commands:**
-- `run_command` - Execute shell command (use `command` field)
-
-**File Operations:**
-- `read_file` - Read file contents (use `path` field)
-- `write_file` - Write file contents (use `path` and `content` fields)
-- `list_directory` - List directory contents (use `path` field)
-- `file_exists` - Check if file exists (use `path` field)
-- `create_directory` - Create directory (use `path` field)
-- `delete_file` - Delete file (use `path` field)
-
-**Clipboard Operations:**
-- `get_clipboard` - Get clipboard contents
-- `set_clipboard` - Set clipboard contents (use `text` field)
-
-**Accessibility:**
-- `get_accessibility_tree` - Get UI accessibility tree
-- `find_element` - Find UI element by role/title (use `text` for role, `content` for title)
+- `zoom` - View specific screen regions at full resolution (400x300 crop around coordinate, defaults to screen center if no coordinate provided)
 
 ## Constraints
 
-- Function timeout: 300 seconds (Vercel Pro)
-- Max steps per task: 100 (default: 100)
+| Parameter | Default | Hard Max | Notes |
+|-----------|---------|----------|-------|
+| `timeout_seconds` | 750 | 750 | 50s buffer before Vercel's 800s limit |
+| `max_steps` | 100 | 100 | Meaningful actions only (screenshots don't count) |
+
+- Client-provided values are silently clamped to hard limits (no errors)
 - Task history TTL: 24 hours
 - Display resolution: Dynamic (fetched from sandbox, default 1024x768)
 

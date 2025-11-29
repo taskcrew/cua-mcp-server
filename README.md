@@ -49,7 +49,7 @@ lib/
 │   ├── execute.ts             # Main agent loop
 │   ├── describe.ts            # Screen description
 │   ├── progress.ts            # Progress tracking
-│   └── actions/               # Action handler registry (29 handlers)
+│   └── actions/               # Action handler registry (16 handlers)
 ├── cua-client.ts              # CUA Cloud API client
 └── tool-schemas.ts            # MCP tool definitions
 ```
@@ -154,7 +154,7 @@ Claude uses describe_screen:
 
 ### Prerequisites
 
-- Vercel account with Pro plan (for 300s function timeout)
+- Vercel account with Pro plan (for 800s function timeout)
 - Vercel Blob storage
 - Anthropic API key
 
@@ -279,14 +279,13 @@ The agent can perform the following actions autonomously:
 
 **UI Actions:**
 - `screenshot` - Capture current screen
-- `left_click`, `right_click`, `double_click`, `triple_click`, `middle_click` - Mouse clicks at coordinates
+- `left_click`, `right_click`, `double_click`, `middle_click` - Mouse clicks at coordinates
 - `mouse_move` - Move cursor to coordinates
 - `left_click_drag` - Click and drag from start to end coordinates
 - `left_mouse_down`, `left_mouse_up` - Press/release mouse button
 - `scroll` - Scroll up/down/left/right
-- `cursor_position` - Get current cursor position
 - `wait` - Pause execution
-- `zoom` - View specific screen region at full resolution (Opus 4.5 only)
+- `zoom` - View specific screen region at full resolution (Opus 4.5 only, defaults to center if no coordinate)
 
 **Keyboard:**
 - `type` - Type text
@@ -294,33 +293,14 @@ The agent can perform the following actions autonomously:
 - `hold_key` - Hold a modifier key down
 - `release_key` - Release a held key
 
-**Shell Commands:**
-- `run_command` - Execute shell command in the sandbox
-
-**File Operations:**
-- `read_file` - Read file contents
-- `write_file` - Write content to file
-- `list_directory` - List directory contents
-- `file_exists` - Check if file exists
-- `create_directory` - Create directory
-- `delete_file` - Delete file
-
-**Clipboard:**
-- `get_clipboard` - Get clipboard contents
-- `set_clipboard` - Set clipboard contents
-
-**Accessibility:**
-- `get_accessibility_tree` - Get UI accessibility tree
-- `find_element` - Find UI element by role/title
-
 ## Constraints
 
 | Constraint | Value |
 |------------|-------|
-| Function timeout | 300 seconds (Vercel Pro) |
-| Max steps per task | 50 |
-| Default steps | 30 |
-| Default timeout | 280 seconds |
+| Function timeout | 800 seconds (Vercel Pro) |
+| Max steps per task | 100 |
+| Default steps | 100 |
+| Default timeout | 750 seconds |
 | Task history TTL | 24 hours |
 | Display resolution | Dynamic (default 1024x768) |
 
@@ -356,13 +336,13 @@ The server needs an Anthropic API key for vision processing. Add it to your Verc
 
 ### Task times out
 
-- Default timeout is 280 seconds
+- Default timeout is 750 seconds
 - Reduce task complexity or break into smaller steps
 - Check if sandbox is responsive with `describe_screen`
 
 ### Task exceeds max steps
 
-- Default is 30 steps, max is 50
+- Default is 100 steps (max 100)
 - Break complex tasks into smaller subtasks
 - Use more specific task descriptions
 
