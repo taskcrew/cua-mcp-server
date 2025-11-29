@@ -259,6 +259,33 @@ export async function handleDoubleClick(
 }
 
 /**
+ * Triple click at specified coordinates (selects entire paragraph/line)
+ */
+export async function handleTripleClick(
+  input: ActionInput,
+  computer: CuaComputerClient,
+  context: ActionContext
+): Promise<ActionResult> {
+  const coords = validateAndExtractCoords(
+    input,
+    context.displayWidth,
+    context.displayHeight
+  );
+  if (!coords.valid) {
+    return { content: coords.error, success: false, error: coords.error };
+  }
+  const result = await computer.tripleClick(coords.x, coords.y);
+  if (result.success) {
+    return { content: `Triple click at (${coords.x}, ${coords.y})`, success: true };
+  }
+  return {
+    content: `Triple click failed: ${result.error || "Unknown error"}`,
+    success: false,
+    error: result.error,
+  };
+}
+
+/**
  * Middle click at specified coordinates
  */
 export async function handleMiddleClick(

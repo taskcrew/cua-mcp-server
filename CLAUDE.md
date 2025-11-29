@@ -157,6 +157,7 @@ Set `CUA_MODEL=claude-sonnet-4-5` for Sonnet 4.5 (faster, lower cost).
 - `left_click` - Click at coordinates
 - `right_click` - Right click at coordinates
 - `double_click` - Double click at coordinates
+- `triple_click` - Triple click at coordinates (selects paragraph/line)
 - `type` - Type text
 - `key` - Press key or key combination
 - `mouse_move` - Move cursor
