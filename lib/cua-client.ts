@@ -63,10 +63,12 @@ export class CuaSandboxClient {
   }
 
   /**
-   * Get sandbox details
+   * Get sandbox details by filtering the list
+   * Note: CUA API doesn't have a direct GET endpoint for individual VMs
    */
-  async getSandbox(name: string): Promise<Sandbox> {
-    return this.request<Sandbox>("GET", `/v1/vms/${name}`);
+  async getSandbox(name: string): Promise<Sandbox | null> {
+    const sandboxes = await this.listSandboxes();
+    return sandboxes.find((s) => s.name === name) || null;
   }
 
   /**

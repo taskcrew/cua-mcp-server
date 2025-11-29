@@ -15,11 +15,17 @@ import {
 import { TOOLS } from "../lib/tool-schemas.js";
 
 // URL validation for SSRF protection
-const BLOB_URL_PREFIX = "https://public.blob.vercel-storage.com/";
+// Vercel Blob URLs use subdomains like: https://<id>.public.blob.vercel-storage.com/
+const BLOB_HOST_SUFFIX = ".public.blob.vercel-storage.com";
 
 function isValidBlobUrl(url: string): boolean {
   try {
-    return url.startsWith(BLOB_URL_PREFIX);
+    const urlObj = new URL(url);
+    return (
+      urlObj.protocol === "https:" &&
+      (urlObj.hostname.endsWith(BLOB_HOST_SUFFIX) ||
+        urlObj.hostname === "public.blob.vercel-storage.com")
+    );
   } catch {
     return false;
   }
@@ -113,7 +119,11 @@ async function executeTool(
       if (!isValidSandboxName(args.name)) {
         return { success: false, error: "Invalid sandbox name" };
       }
-      return await sandboxClient.getSandbox(args.name);
+      const sandbox = await sandboxClient.getSandbox(args.name);
+      if (!sandbox) {
+        return { success: false, error: `Sandbox not found: ${args.name}` };
+      }
+      return sandbox;
     }
 
     case "start_sandbox": {

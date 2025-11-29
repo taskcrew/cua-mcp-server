@@ -51,9 +51,25 @@ When complete → { status: "completed", result: { ... } }
 
 ### Key Files
 
-- `api/mcp.ts` - MCP handler with 9 tools (5 sandbox management + 4 agentic)
-- `lib/agent.ts` - Agent loop with Anthropic computer_use tool
-- `lib/cua-client.ts` - CUA Cloud API clients for sandbox and computer control
+```
+api/mcp.ts                     # MCP handler with 9 tools (5 sandbox + 4 agentic)
+lib/
+├── agent/                     # Modular agent architecture
+│   ├── index.ts               # Public exports
+│   ├── types.ts               # Type definitions (AgentStep, TaskResult, etc.)
+│   ├── config.ts              # Constants and model configurations
+│   ├── validation.ts          # Coordinate validation helpers
+│   ├── progress.ts            # Progress tracking and Blob storage
+│   ├── execute.ts             # Main agent execution loop
+│   ├── describe.ts            # Screen description functionality
+│   ├── utils.ts               # Utilities (sleep, generateTaskId, etc.)
+│   └── actions/               # Action handler registry
+│       ├── index.ts           # Registry exports and OBSERVATION_ACTIONS set
+│       ├── types.ts           # ActionHandler type, ActionContext
+│       └── handlers.ts        # 29 action handlers (click, type, scroll, etc.)
+├── cua-client.ts              # CUA Cloud API clients (sandbox + computer control)
+└── tool-schemas.ts            # MCP tool definitions (extracted from mcp.ts)
+```
 
 ### API Key Handling
 

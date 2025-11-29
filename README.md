@@ -37,7 +37,24 @@ Claude Code (Orchestrator)
 (TEXT ONLY - no images)
 ```
 
-## Available Tools (8 total)
+## Project Structure
+
+```
+api/mcp.ts                     # MCP protocol handler
+lib/
+├── agent/                     # Modular agent architecture
+│   ├── index.ts               # Public exports
+│   ├── types.ts               # Type definitions
+│   ├── config.ts              # Model configurations
+│   ├── execute.ts             # Main agent loop
+│   ├── describe.ts            # Screen description
+│   ├── progress.ts            # Progress tracking
+│   └── actions/               # Action handler registry (29 handlers)
+├── cua-client.ts              # CUA Cloud API client
+└── tool-schemas.ts            # MCP tool definitions
+```
+
+## Available Tools (9 total)
 
 ### Sandbox Management (5 tools)
 
@@ -51,12 +68,13 @@ Claude Code (Orchestrator)
 
 > **Note:** Create and delete sandboxes via the [CUA Dashboard](https://cloud.trycua.com) - the Cloud API doesn't expose these operations.
 
-### Agentic Tools (3 tools)
+### Agentic Tools (4 tools)
 
 | Tool | Description |
 |------|-------------|
 | `describe_screen` | Get a text description of current screen state using vision AI. No actions taken. |
-| `run_task` | Execute a computer task autonomously. Returns text summary only - no images. |
+| `run_task` | Execute a computer task autonomously. Returns immediately with task_id for polling. |
+| `get_task_progress` | Poll progress of running tasks. Returns current step, last action, and reasoning. |
 | `get_task_history` | Retrieve results of a previously executed task by ID. |
 
 ## Quick Start
