@@ -8,11 +8,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { CuaComputerClient } from "../cua-client.js";
 import type { ScreenDescription } from "./types.js";
-import { getModelConfig, RETRY_DELAY_MS } from "./config.js";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { getModelConfig, RETRY_DELAY_MS, ANTHROPIC_MAX_RETRIES } from "./config.js";
+import { sleep } from "./utils.js";
 
 /**
  * Describe what's on the screen using vision
@@ -35,7 +32,7 @@ export async function describeScreen(
 ): Promise<ScreenDescription> {
   const anthropic = new Anthropic({
     apiKey: anthropicApiKey,
-    maxRetries: 4, // Default is 2, increase for reliability
+    maxRetries: ANTHROPIC_MAX_RETRIES, // Default is 2, increase for reliability
   });
   const computer = new CuaComputerClient(sandboxName, host, cuaApiKey);
 

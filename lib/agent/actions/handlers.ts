@@ -17,13 +17,7 @@ import {
   RETRY_DELAY_MS,
   MAX_WAIT_MS,
 } from "../config.js";
-
-/**
- * Sleep utility for retry delays
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { sleep } from "../utils.js";
 
 // ==========================================
 // Screenshot Actions
@@ -33,9 +27,9 @@ function sleep(ms: number): Promise<void> {
  * Capture full screen screenshot
  */
 export async function handleScreenshot(
-  input: ActionInput,
+  _input: ActionInput,
   computer: CuaComputerClient,
-  context: ActionContext
+  _context: ActionContext
 ): Promise<ActionResult> {
   let result = await computer.screenshot();
   // Retry once on failure after delay
@@ -384,24 +378,38 @@ export async function handleLeftClickDrag(
  * Press and hold left mouse button
  */
 export async function handleLeftMouseDown(
-  input: ActionInput,
+  _input: ActionInput,
   computer: CuaComputerClient,
-  context: ActionContext
+  _context: ActionContext
 ): Promise<ActionResult> {
-  await computer.mouseDown();
-  return { content: "Mouse button pressed down", success: true };
+  const result = await computer.mouseDown();
+  if (result.success) {
+    return { content: "Mouse button pressed down", success: true };
+  }
+  return {
+    content: `Mouse down failed: ${result.error || "Unknown error"}`,
+    success: false,
+    error: result.error,
+  };
 }
 
 /**
  * Release left mouse button
  */
 export async function handleLeftMouseUp(
-  input: ActionInput,
+  _input: ActionInput,
   computer: CuaComputerClient,
-  context: ActionContext
+  _context: ActionContext
 ): Promise<ActionResult> {
-  await computer.mouseUp();
-  return { content: "Mouse button released", success: true };
+  const result = await computer.mouseUp();
+  if (result.success) {
+    return { content: "Mouse button released", success: true };
+  }
+  return {
+    content: `Mouse up failed: ${result.error || "Unknown error"}`,
+    success: false,
+    error: result.error,
+  };
 }
 
 // ==========================================
@@ -414,7 +422,7 @@ export async function handleLeftMouseUp(
 export async function handleType(
   input: ActionInput,
   computer: CuaComputerClient,
-  context: ActionContext
+  _context: ActionContext
 ): Promise<ActionResult> {
   if (!input.text) {
     return {
@@ -440,7 +448,7 @@ export async function handleType(
 export async function handleKey(
   input: ActionInput,
   computer: CuaComputerClient,
-  context: ActionContext
+  _context: ActionContext
 ): Promise<ActionResult> {
   if (!input.text) {
     return {
@@ -475,7 +483,7 @@ export async function handleKey(
 export async function handleHoldKey(
   input: ActionInput,
   computer: CuaComputerClient,
-  context: ActionContext
+  _context: ActionContext
 ): Promise<ActionResult> {
   const keyToHold = input.key || input.text;
   if (!keyToHold) {
@@ -485,10 +493,17 @@ export async function handleHoldKey(
       error: "hold_key requires key",
     };
   }
-  await computer.keyDown(keyToHold);
+  const result = await computer.keyDown(keyToHold);
+  if (result.success) {
+    return {
+      content: `Key held down: ${keyToHold}. Will remain held until released.`,
+      success: true,
+    };
+  }
   return {
-    content: `Key held down: ${keyToHold}. Will remain held until released.`,
-    success: true,
+    content: `Hold key failed: ${result.error || "Unknown error"}`,
+    success: false,
+    error: result.error,
   };
 }
 
@@ -578,11 +593,12 @@ export async function handleScroll(
  */
 export async function handleWait(
   input: ActionInput,
-  computer: CuaComputerClient,
-  context: ActionContext
+  _computer: CuaComputerClient,
+  _context: ActionContext
 ): Promise<ActionResult> {
-  const waitMs = (input.duration as number) || 1000;
+  const requestedMs = (input.duration as number) || 1000;
   // Cap at maximum wait time
-  await sleep(Math.min(waitMs, MAX_WAIT_MS));
-  return { content: `Waited ${waitMs}ms`, success: true };
+  const actualWait = Math.min(requestedMs, MAX_WAIT_MS);
+  await sleep(actualWait);
+  return { content: `Waited ${actualWait}ms`, success: true };
 }

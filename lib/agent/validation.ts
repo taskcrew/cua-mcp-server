@@ -75,7 +75,7 @@ export function validateAndExtractCoords(
   const [x, y] = input.coordinate;
   const validation = validateCoordinates(x, y, displayWidth, displayHeight);
   if (!validation.valid) {
-    return { valid: false, error: validation.error! };
+    return { valid: false, error: validation.error ?? "Validation failed" };
   }
   return { valid: true, x, y };
 }

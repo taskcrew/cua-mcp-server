@@ -23,6 +23,7 @@ import {
   HEARTBEAT_INTERVAL_MS,
   DEFAULT_MAX_STEPS,
   DEFAULT_TIMEOUT_SECONDS,
+  ANTHROPIC_MAX_RETRIES,
   getModelConfig,
 } from "./config.js";
 import {
@@ -272,7 +273,7 @@ export async function executeTask(
 
   const anthropic = new Anthropic({
     apiKey: anthropicApiKey,
-    maxRetries: 4, // Default is 2, increase for long-running tasks
+    maxRetries: ANTHROPIC_MAX_RETRIES, // Default is 2, increase for long-running tasks
   });
   const computer = new CuaComputerClient(sandboxName, host, cuaApiKey);
 
@@ -363,9 +364,13 @@ export async function executeTask(
       let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
       const startHeartbeat = () => {
         heartbeatInterval = setInterval(async () => {
-          progress.updated_at = Date.now();
-          progress.elapsed_ms = Date.now() - startTime;
-          await updateProgress(taskId, progress);
+          // Create snapshot to avoid race condition with main loop
+          const snapshot = {
+            ...progress,
+            updated_at: Date.now(),
+            elapsed_ms: Date.now() - startTime,
+          };
+          await updateProgress(taskId, snapshot);
         }, HEARTBEAT_INTERVAL_MS);
       };
       const stopHeartbeat = () => {

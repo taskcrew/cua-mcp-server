@@ -13,6 +13,8 @@ import {
   MAX_STEPS_LIMIT,
   DEFAULT_TIMEOUT_SECONDS,
   MAX_TIMEOUT_SECONDS,
+  SANDBOX_NAME_MAX_LENGTH,
+  TASK_ID_MAX_LENGTH,
   type TaskResult,
   type TaskProgress,
 } from "../lib/agent/index.js";
@@ -59,8 +61,18 @@ function isValidSandboxName(name: unknown): name is string {
   return (
     typeof name === "string" &&
     name.length > 0 &&
-    name.length <= 64 &&
+    name.length <= SANDBOX_NAME_MAX_LENGTH &&
     /^[a-zA-Z0-9_-]+$/.test(name)
+  );
+}
+
+// Validate task ID to prevent path traversal and injection
+function isValidTaskId(id: unknown): id is string {
+  return (
+    typeof id === "string" &&
+    id.length > 0 &&
+    id.length <= TASK_ID_MAX_LENGTH &&
+    /^[a-zA-Z0-9_-]+$/.test(id)
   );
 }
 
@@ -159,7 +171,12 @@ async function executeTool(
         return { success: false, error: "Invalid sandbox name" };
       }
       const sandboxName = args.sandbox_name;
-      const focus = (args.focus as "ui" | "text" | "full") || "ui";
+      // Validate focus enum - default to "ui" if invalid
+      const validFocusValues = ["ui", "text", "full"] as const;
+      const rawFocus = args.focus as string | undefined;
+      const focus = validFocusValues.includes(rawFocus as "ui" | "text" | "full")
+        ? (rawFocus as "ui" | "text" | "full")
+        : "ui";
       const question = args.question as string | undefined;
 
       // Get sandbox host
@@ -263,8 +280,8 @@ async function executeTool(
 
     case "get_task_history": {
       const taskId = args.task_id as string;
-      if (typeof taskId !== "string" || !taskId.trim()) {
-        return { success: false, error: "task_id is required" };
+      if (!isValidTaskId(taskId)) {
+        return { success: false, error: "Invalid task_id format" };
       }
       const historyUrl = args.history_url as string | undefined;
 
@@ -296,8 +313,8 @@ async function executeTool(
 
     case "get_task_progress": {
       const taskId = args.task_id as string;
-      if (typeof taskId !== "string" || !taskId.trim()) {
-        return { task_id: "", status: "error", error: "task_id is required" };
+      if (!isValidTaskId(taskId)) {
+        return { task_id: "", status: "error", error: "Invalid task_id format" };
       }
 
       // Always use head() to get fresh URL - bypasses CDN cache

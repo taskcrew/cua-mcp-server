@@ -7,10 +7,8 @@
 
 import { put } from "@vercel/blob";
 import type { TaskProgress } from "./types.js";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { sleep } from "./utils.js";
+import { RETRY_BACKOFF_BASE_MS } from "./config.js";
 
 /**
  * Update progress in Vercel Blob storage with retry logic
@@ -46,7 +44,7 @@ export async function updateProgress(
         return undefined;
       }
       // Wait before retry (exponential backoff: 100ms, 200ms)
-      await sleep(100 * (attempt + 1));
+      await sleep(RETRY_BACKOFF_BASE_MS * (attempt + 1));
     }
   }
   return undefined;

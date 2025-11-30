@@ -44,11 +44,24 @@ export const DEFAULT_TIMEOUT_SECONDS = 750;
 export const MAX_TIMEOUT_SECONDS = 750;
 
 // ============================================
+// Validation Constants
+// ============================================
+
+/** Maximum length for sandbox names */
+export const SANDBOX_NAME_MAX_LENGTH = 64;
+
+/** Maximum length for task IDs */
+export const TASK_ID_MAX_LENGTH = 64;
+
+// ============================================
 // Timing Constants
 // ============================================
 
 /** Delay before retrying failed operations (ms) */
 export const RETRY_DELAY_MS = 500;
+
+/** Base delay for retry backoff (ms) */
+export const RETRY_BACKOFF_BASE_MS = 100;
 
 /** Maximum wait time for wait action (ms) */
 export const MAX_WAIT_MS = 5000;
@@ -58,6 +71,9 @@ export const HEARTBEAT_INTERVAL_MS = 5000;
 
 /** Delay for UI to settle after actions (ms) */
 export const UI_SETTLE_DELAY_MS = 500;
+
+/** Max retries for Anthropic API calls (default is 2) */
+export const ANTHROPIC_MAX_RETRIES = 4;
 
 // ============================================
 // Model Configurations
