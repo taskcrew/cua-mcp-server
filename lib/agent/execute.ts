@@ -128,6 +128,7 @@ IMPORTANT RULES:
 5. Do NOT scroll unless necessary - most UI elements are already visible
 
 ENHANCED ACTIONS AVAILABLE:
+- triple_click: Triple click to select entire paragraph or line of text
 - hold_key: Press and hold a modifier key (e.g., shift, ctrl, alt). Keys are automatically released after the next action.
 - left_mouse_down: Press and hold left mouse button at coordinates
 - left_mouse_up: Release left mouse button at coordinates

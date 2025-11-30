@@ -279,7 +279,7 @@ The agent can perform the following actions autonomously:
 
 **UI Actions:**
 - `screenshot` - Capture current screen
-- `left_click`, `right_click`, `double_click`, `middle_click` - Mouse clicks at coordinates
+- `left_click`, `right_click`, `double_click`, `triple_click`, `middle_click` - Mouse clicks at coordinates
 - `mouse_move` - Move cursor to coordinates
 - `left_click_drag` - Click and drag from start to end coordinates
 - `left_mouse_down`, `left_mouse_up` - Press/release mouse button
@@ -290,8 +290,7 @@ The agent can perform the following actions autonomously:
 **Keyboard:**
 - `type` - Type text
 - `key` - Press key or key combination (e.g., "ctrl+c")
-- `hold_key` - Hold a modifier key down
-- `release_key` - Release a held key
+- `hold_key` - Hold a modifier key down (auto-releases after next action)
 
 ## Constraints
 

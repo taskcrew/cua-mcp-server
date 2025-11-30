@@ -137,6 +137,7 @@ const ACTION_LABELS: Record<string, string> = {
   left_click: "Click",
   right_click: "Right-click",
   double_click: "Double-click",
+  triple_click: "Triple-click",
   middle_click: "Middle-click",
   type: "Type text",
   key: "Key press",
