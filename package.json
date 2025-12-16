@@ -1,6 +1,6 @@
 {
   "name": "cua-mcp-server",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "MCP Server for CUA Cloud - Virtual Machine sandbox management and computer control",
   "type": "module",
   "scripts": {
