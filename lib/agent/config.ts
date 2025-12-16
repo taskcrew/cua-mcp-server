@@ -34,6 +34,19 @@ export const ZOOM_REGION_HEIGHT = 300;
 /** Default max steps if not specified by client */
 export const DEFAULT_MAX_STEPS = 100;
 
+// ============================================
+// Context Management
+// ============================================
+
+/**
+ * Maximum number of message exchanges to keep in history.
+ * Each exchange = assistant response + user tool results.
+ * Older exchanges are trimmed to prevent context bloat from accumulated screenshots.
+ * With 20 exchanges, we keep ~40 messages which allows for sufficient context
+ * while limiting token usage from base64 images (~30KB each, ~400 tokens).
+ */
+export const MAX_MESSAGE_HISTORY = 20;
+
 /** Hard maximum steps - client cannot exceed this */
 export const MAX_STEPS_LIMIT = 100;
 

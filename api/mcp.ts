@@ -216,12 +216,14 @@ async function executeTool(
       if (typeof task !== "string" || !task.trim()) {
         return { success: false, error: "Task description is required", summary: "Failed to start task" };
       }
+      const rawMaxSteps = Number(args.max_steps);
       const maxSteps = Math.min(
-        (args.max_steps as number) || DEFAULT_MAX_STEPS,
+        Number.isFinite(rawMaxSteps) && rawMaxSteps > 0 ? rawMaxSteps : DEFAULT_MAX_STEPS,
         MAX_STEPS_LIMIT
       );
+      const rawTimeout = Number(args.timeout_seconds);
       const timeoutSeconds = Math.min(
-        (args.timeout_seconds as number) || DEFAULT_TIMEOUT_SECONDS,
+        Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : DEFAULT_TIMEOUT_SECONDS,
         MAX_TIMEOUT_SECONDS
       );
 

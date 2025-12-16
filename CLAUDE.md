@@ -12,11 +12,49 @@ CUA MCP Server is an **agentic** Model Context Protocol (MCP) server that bridge
 
 ```bash
 npm install           # Install dependencies
-npm run dev           # Start local Vercel dev server
+npm run dev           # Start local Vercel dev server (http://localhost:3000)
 vercel --prod         # Deploy to production
 ```
 
 No explicit build step needed - Vercel compiles TypeScript on deploy.
+
+## Local Development
+
+### Prerequisites
+- Node.js 18+
+- Vercel CLI (`npm i -g vercel`)
+- CUA Cloud account with API key
+- Anthropic API key
+
+### Environment Setup
+Create `.env.local`:
+```bash
+CUA_API_KEY=your_cua_key
+ANTHROPIC_API_KEY=your_anthropic_key
+# BLOB_READ_WRITE_TOKEN is auto-provided by Vercel
+```
+
+### Testing Locally
+```bash
+npm run dev
+# In another terminal, test with:
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"method":"tools/list"}'
+```
+
+### Testing with Claude Code
+Add to `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "cua-local": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:3000/mcp"]
+    }
+  }
+}
+```
 
 ## Architecture
 
@@ -71,16 +109,6 @@ lib/
 └── tool-schemas.ts            # MCP tool definitions (extracted from mcp.ts)
 ```
 
-### API Key Handling
-
-Two API keys required:
-1. `CUA_API_KEY` - For sandbox management and computer control
-2. `ANTHROPIC_API_KEY` - For vision processing in agent loop
-
-CUA key resolution order:
-1. `X-CUA-API-Key` request header
-2. `CUA_API_KEY` environment variable
-
 ## Tool Categories (9 total)
 
 **Sandbox Management (5):**
@@ -98,38 +126,63 @@ CUA key resolution order:
 - `get_task_progress` - Poll progress of running tasks (step count, last action, reasoning)
 - `get_task_history` - Retrieve past task results from Vercel Blob
 
-## Progress Tracking
+## Debugging & Troubleshooting
 
-During long-running tasks, the main agent can poll for progress using `get_task_progress`:
+### Common Issues
 
-```
-run_task returns: { task_id, progress_url, ... }
-       ↓
-Poll every 5-10 seconds: get_task_progress({ task_id, progress_url })
-       ↓
-Response (running):
-{
-  "task_id": "task_123",
-  "status": "running",
-  "progress": {
-    "current_step": 5,
-    "max_steps": 100,
-    "elapsed_ms": 45000,
-    "last_action": "left_click",
-    "last_reasoning": "I see a Submit button...",
-    "steps_summary": ["Click", "Type text", "Click"]
-  }
-}
-       ↓
-Response (completed):
-{
-  "task_id": "task_123",
-  "status": "completed",
-  "result": { "success": true, "summary": "...", "total_steps": 12 }
-}
+**"Sandbox not found" / 404 errors:**
+- Verify sandbox name matches exactly (case-sensitive)
+- Check sandbox status - may be stopped/paused
+- Ensure CUA_API_KEY has access to the sandbox
+
+**Task never completes:**
+- Check Vercel function logs: `vercel logs --follow`
+- Task may have hit timeout (750s max)
+- Agent may be stuck in a loop - check progress for repeated actions
+
+**Stale progress data:**
+Vercel Blob uses CDN caching. Always use cache-busting:
+```typescript
+const cacheBuster = `?t=${Date.now()}`;
+const response = await fetch(progressUrl + cacheBuster, { cache: 'no-store' });
 ```
 
-Progress is stored in Vercel Blob at `progress/{task_id}.json` and updated after each action.
+**Local dev: Blob storage errors:**
+Vercel Blob requires `BLOB_READ_WRITE_TOKEN`. For local development:
+1. Link project: `vercel link`
+2. Pull env vars: `vercel env pull .env.local`
+
+### Viewing Logs
+
+```bash
+# Production logs
+vercel logs --follow
+
+# Filter by function
+vercel logs --filter="api/mcp"
+```
+
+### Agent Loop Debugging
+
+The agent loop in `lib/agent/execute.ts` has detailed console logging:
+- `[Agent] Step X:` shows current iteration
+- `[Agent] Action:` shows the action Claude requested
+- `[Agent] Error:` shows any failures
+
+## Testing
+
+**Current state:** No automated tests exist.
+
+**Manual testing workflow:**
+1. Start local dev server
+2. Use `curl` or MCP inspector to call tools
+3. Monitor Vercel logs for errors
+4. Check Vercel Blob storage for progress/history data
+
+**Testing tips:**
+- Use `describe_screen` first to verify sandbox connectivity
+- Start with simple tasks before complex multi-step ones
+- Monitor `get_task_progress` during long tasks
 
 ## Environment Variables
 
@@ -140,6 +193,16 @@ Progress is stored in Vercel Blob at `progress/{task_id}.json` and updated after
 | `BLOB_READ_WRITE_TOKEN` | Yes | Vercel Blob token (auto-added) |
 | `CUA_API_BASE` | No | Custom API base URL |
 | `CUA_MODEL` | No | Model to use: `claude-opus-4-5` (default) or `claude-sonnet-4-5` |
+
+### API Key Handling
+
+Two API keys required:
+1. `CUA_API_KEY` - For sandbox management and computer control
+2. `ANTHROPIC_API_KEY` - For vision processing in agent loop
+
+CUA key resolution order:
+1. `X-CUA-API-Key` request header
+2. `CUA_API_KEY` environment variable
 
 ## Model Support
 
@@ -174,7 +237,7 @@ Set `CUA_MODEL=claude-sonnet-4-5` for Sonnet 4.5 (faster, lower cost).
 **Opus 4.5 Only:**
 - `zoom` - View specific screen regions at full resolution (400x300 crop around coordinate, defaults to screen center if no coordinate provided)
 
-## Constraints
+## Constraints & Limits
 
 | Parameter | Default | Hard Max | Notes |
 |-----------|---------|----------|-------|
@@ -213,3 +276,23 @@ Example sequence:
 
 Actions that trigger auto-release: clicks, typing, key presses, scrolling, dragging.
 Actions that don't trigger release: screenshot, zoom, wait, hold_key itself.
+
+## Known Limitations
+
+1. **No create/delete sandbox via MCP** - Use CUA Dashboard instead
+2. **750s timeout** - Vercel serverless limit; very long tasks may need to be split
+3. **No persistent state** - Each task starts fresh; no memory between tasks
+4. **Vision-only** - Cannot access DOM, page source, or network requests
+5. **Single sandbox per task** - Cannot orchestrate multiple sandboxes in one task
+6. **No streaming** - Results returned only after task completes (use progress polling)
+
+## Security Considerations
+
+**API Key Sharing:** When deployed, authenticated callers (those with valid CUA_API_KEY) also consume the server's ANTHROPIC_API_KEY quota. The server does not implement per-request billing or key scoping. For production deployments with untrusted users, consider:
+- Deploying behind an API gateway with rate limiting
+- Requiring users to provide their own Anthropic API key
+- Restricting CORS to specific origins
+
+**CORS Policy:** The server uses `Access-Control-Allow-Origin: *` for MCP compatibility. This is intentional for broad client support but may need restriction in production environments with security requirements.
+
+**Context Management:** Message history is trimmed to the last 20 exchanges to prevent context exhaustion from accumulated screenshots. Very long tasks (50+ meaningful steps with verification screenshots) may still approach context limits.

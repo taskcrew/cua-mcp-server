@@ -24,6 +24,7 @@ import {
   DEFAULT_MAX_STEPS,
   DEFAULT_TIMEOUT_SECONDS,
   ANTHROPIC_MAX_RETRIES,
+  MAX_MESSAGE_HISTORY,
   getModelConfig,
 } from "./config.js";
 import {
@@ -42,6 +43,29 @@ const NO_AUTO_RELEASE_ACTIONS = new Set([
   "hold_key",
   "wait",
 ]);
+
+// ============================================
+// Message History Management
+// ============================================
+
+/**
+ * Trim message history to prevent context bloat from accumulated screenshots.
+ * Keeps the initial user message (task) plus the last N exchanges.
+ * Each exchange = assistant response + user tool results.
+ *
+ * @param messages - The messages array to trim (mutated in place)
+ */
+function trimMessageHistory(
+  messages: Anthropic.Beta.BetaMessageParam[]
+): void {
+  // Each exchange is 2 messages (assistant + user), plus initial user message
+  const maxMessages = MAX_MESSAGE_HISTORY * 2 + 1;
+
+  while (messages.length > maxMessages) {
+    // Remove the oldest exchange (indices 1 and 2), preserving the initial task message at index 0
+    messages.splice(1, 2);
+  }
+}
 
 // ============================================
 // Screen Dimensions Helper
@@ -324,7 +348,7 @@ export async function executeTask(
       await finalizeTask(taskId, progress, "timeout", {
         success: false,
         summary: "Task timed out",
-        steps: steps.length,
+        steps: meaningfulSteps,
         durationMs: elapsed,
         error: `Timeout after ${timeoutSeconds}s`,
       });
@@ -334,7 +358,7 @@ export async function executeTask(
         success: false,
         summary: "Task timed out",
         steps,
-        steps_taken: steps.length,
+        steps_taken: meaningfulSteps,
         duration_ms: elapsed,
         screen_size: { width: displayWidth, height: displayHeight },
         error: `Timeout after ${timeoutSeconds}s`,
@@ -557,6 +581,7 @@ export async function executeTask(
               type: "tool_result",
               tool_use_id: block.id,
               content: result.content,
+              is_error: !result.success,
             });
 
             // Delay for UI to settle after meaningful actions
@@ -596,6 +621,9 @@ export async function executeTask(
           content: toolResults,
         });
       }
+
+      // Trim message history to prevent context bloat from accumulated screenshots
+      trimMessageHistory(messages);
 
       // If the model stopped without tool use and without completion markers
       if (response.stop_reason === "end_turn" && toolResults.length === 0) {
