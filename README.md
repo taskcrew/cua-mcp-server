@@ -46,9 +46,11 @@ lib/
 │   ├── index.ts               # Public exports
 │   ├── types.ts               # Type definitions
 │   ├── config.ts              # Model configurations
+│   ├── validation.ts          # Coordinate validation helpers
 │   ├── execute.ts             # Main agent loop
 │   ├── describe.ts            # Screen description
 │   ├── progress.ts            # Progress tracking
+│   ├── utils.ts               # Utilities (sleep, generateTaskId)
 │   └── actions/               # Action handler registry (16 handlers)
 ├── cua-client.ts              # CUA Cloud API client
 └── tool-schemas.ts            # MCP tool definitions
